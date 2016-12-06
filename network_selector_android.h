@@ -1,5 +1,5 @@
 //
-// Copyright (C) 2011 The Android Open Source Project
+// Copyright (C) 2016 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,25 +14,27 @@
 // limitations under the License.
 //
 
-#ifndef UPDATE_ENGINE_COMMON_MOCK_CERTIFICATE_CHECKER_H_
-#define UPDATE_ENGINE_COMMON_MOCK_CERTIFICATE_CHECKER_H_
+#ifndef UPDATE_ENGINE_NETWORK_SELECTOR_ANDROID_H_
+#define UPDATE_ENGINE_NETWORK_SELECTOR_ANDROID_H_
 
-#include <gmock/gmock.h>
-#include <openssl/ssl.h>
+#include <base/macros.h>
 
-#include "update_engine/common/certificate_checker.h"
+#include "update_engine/network_selector_interface.h"
 
 namespace chromeos_update_engine {
 
-class MockOpenSSLWrapper : public OpenSSLWrapper {
+class NetworkSelectorAndroid final : public NetworkSelectorInterface {
  public:
-  MOCK_CONST_METHOD4(GetCertificateDigest,
-                     bool(X509_STORE_CTX* x509_ctx,
-                          int* out_depth,
-                          unsigned int* out_digest_length,
-                          uint8_t* out_digest));
+  NetworkSelectorAndroid() = default;
+  ~NetworkSelectorAndroid() override = default;
+
+  // NetworkSelectorInterface overrides.
+  bool SetProcessNetwork(NetworkId network_id) override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(NetworkSelectorAndroid);
 };
 
 }  // namespace chromeos_update_engine
 
-#endif  // UPDATE_ENGINE_COMMON_MOCK_CERTIFICATE_CHECKER_H_
+#endif  // UPDATE_ENGINE_NETWORK_SELECTOR_ANDROID_H_
