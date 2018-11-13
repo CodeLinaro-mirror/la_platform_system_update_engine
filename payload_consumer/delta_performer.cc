@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <map>
 #include <memory>
 #include <string>
 #include <utility>
@@ -607,6 +608,8 @@ bool DeltaPerformer::Write(const void* bytes, size_t count, ErrorCode *error) {
     // Clear the download buffer.
     DiscardBuffer(false, metadata_size_);
 
+    block_size_ = manifest_.block_size();
+
     // This populates |partitions_| and the |install_plan.partitions| with the
     // list of partitions from the manifest.
     if (!ParseManifestPartitions(error))
@@ -637,9 +640,11 @@ bool DeltaPerformer::Write(const void* bytes, size_t count, ErrorCode *error) {
       return false;
     }
 
-    if (!OpenCurrentPartition()) {
-      *error = ErrorCode::kInstallDeviceOpenError;
-      return false;
+    if (next_operation_num_ < acc_num_operations_[current_partition_]) {
+      if (!OpenCurrentPartition()) {
+        *error = ErrorCode::kInstallDeviceOpenError;
+        return false;
+      }
     }
 
     if (next_operation_num_ > 0)
@@ -656,9 +661,12 @@ bool DeltaPerformer::Write(const void* bytes, size_t count, ErrorCode *error) {
 
     // We know there are more operations to perform because we didn't reach the
     // |num_total_operations_| limit yet.
-    while (next_operation_num_ >= acc_num_operations_[current_partition_]) {
+    if (next_operation_num_ >= acc_num_operations_[current_partition_]) {
       CloseCurrentPartition();
-      current_partition_++;
+      // Skip until there are operations for current_partition_.
+      while (next_operation_num_ >= acc_num_operations_[current_partition_]) {
+        current_partition_++;
+      }
       if (!OpenCurrentPartition()) {
         *error = ErrorCode::kInstallDeviceOpenError;
         return false;
@@ -868,7 +876,60 @@ bool DeltaPerformer::ParseManifestPartitions(ErrorCode* error) {
     install_part.target_size = info.size();
     install_part.target_hash.assign(info.hash().begin(), info.hash().end());
 
+    install_part.block_size = block_size_;
+    if (partition.has_hash_tree_extent()) {
+      Extent extent = partition.hash_tree_data_extent();
+      install_part.hash_tree_data_offset = extent.start_block() * block_size_;
+      install_part.hash_tree_data_size = extent.num_blocks() * block_size_;
+      extent = partition.hash_tree_extent();
+      install_part.hash_tree_offset = extent.start_block() * block_size_;
+      install_part.hash_tree_size = extent.num_blocks() * block_size_;
+      uint64_t hash_tree_data_end =
+          install_part.hash_tree_data_offset + install_part.hash_tree_data_size;
+      if (install_part.hash_tree_offset < hash_tree_data_end) {
+        LOG(ERROR) << "Invalid hash tree extents, hash tree data ends at "
+                   << hash_tree_data_end << ", but hash tree starts at "
+                   << install_part.hash_tree_offset;
+        *error = ErrorCode::kDownloadNewPartitionInfoError;
+        return false;
+      }
+      install_part.hash_tree_algorithm = partition.hash_tree_algorithm();
+      install_part.hash_tree_salt.assign(partition.hash_tree_salt().begin(),
+                                         partition.hash_tree_salt().end());
+    }
+    if (partition.has_fec_extent()) {
+      Extent extent = partition.fec_data_extent();
+      install_part.fec_data_offset = extent.start_block() * block_size_;
+      install_part.fec_data_size = extent.num_blocks() * block_size_;
+      extent = partition.fec_extent();
+      install_part.fec_offset = extent.start_block() * block_size_;
+      install_part.fec_size = extent.num_blocks() * block_size_;
+      uint64_t fec_data_end =
+          install_part.fec_data_offset + install_part.fec_data_size;
+      if (install_part.fec_offset < fec_data_end) {
+        LOG(ERROR) << "Invalid fec extents, fec data ends at " << fec_data_end
+                   << ", but fec starts at " << install_part.fec_offset;
+        *error = ErrorCode::kDownloadNewPartitionInfoError;
+        return false;
+      }
+      install_part.fec_roots = partition.fec_roots();
+    }
+
     install_plan_->partitions.push_back(install_part);
+  }
+
+  if (install_plan_->target_slot != BootControlInterface::kInvalidSlot) {
+    BootControlInterface::PartitionSizes partition_sizes;
+    for (const InstallPlan::Partition& partition : install_plan_->partitions) {
+      partition_sizes.emplace(partition.name, partition.target_size);
+    }
+    if (!boot_control_->InitPartitionMetadata(install_plan_->target_slot,
+                                              partition_sizes)) {
+      LOG(ERROR) << "Unable to initialize partition metadata for slot "
+                 << BootControlInterface::SlotName(install_plan_->target_slot);
+      *error = ErrorCode::kInstallDeviceOpenError;
+      return false;
+    }
   }
 
   if (!install_plan_->LoadPartitionsFromSlots(boot_control_)) {
@@ -1840,7 +1901,6 @@ bool DeltaPerformer::CheckpointUpdateProgress() {
 
 bool DeltaPerformer::PrimeUpdateState() {
   CHECK(manifest_valid_);
-  block_size_ = manifest_.block_size();
 
   int64_t next_operation = kUpdateStateOperationInvalid;
   if (!prefs_->GetInt64(kPrefsUpdateStateNextOperation, &next_operation) ||

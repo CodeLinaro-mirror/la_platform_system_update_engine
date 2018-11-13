@@ -14,24 +14,25 @@
 // limitations under the License.
 //
 
-#ifndef UPDATE_ENGINE_UTILS_ANDROID_H_
-#define UPDATE_ENGINE_UTILS_ANDROID_H_
+#ifndef UPDATE_ENGINE_COMMON_MOCK_PROXY_RESOLVER_H_
+#define UPDATE_ENGINE_COMMON_MOCK_PROXY_RESOLVER_H_
 
 #include <string>
 
-#include <base/files/file_util.h>
+#include <gmock/gmock.h>
+
+#include "update_engine/common/proxy_resolver.h"
 
 namespace chromeos_update_engine {
 
-namespace utils {
-
-// Find the block device that should be mounted in the |mount_point| path and
-// store it in |device|. Returns whether a device was found on the fstab.
-bool DeviceForMountPoint(const std::string& mount_point,
-                         base::FilePath* device);
-
-}  // namespace utils
+class MockProxyResolver : public ProxyResolver {
+ public:
+  MOCK_METHOD2(GetProxiesForUrl,
+               ProxyRequestId(const std::string& url,
+                              const ProxiesResolvedFn& callback));
+  MOCK_METHOD1(CancelProxyRequest, bool(ProxyRequestId request));
+};
 
 }  // namespace chromeos_update_engine
 
-#endif  // UPDATE_ENGINE_UTILS_ANDROID_H_
+#endif  // UPDATE_ENGINE_COMMON_MOCK_PROXY_RESOLVER_H_
