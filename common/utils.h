@@ -44,14 +44,9 @@ namespace chromeos_update_engine {
 
 namespace utils {
 
-// Converts a struct timespec representing a number of seconds since
-// the Unix epoch to a base::Time. Sub-microsecond time is rounded
-// down.
-base::Time TimeFromStructTimespec(struct timespec *ts);
-
 // Formats |vec_str| as a string of the form ["<elem1>", "<elem2>"].
 // Does no escaping, only use this for presentation in error messages.
-std::string StringVectorToString(const std::vector<std::string> &vec_str);
+std::string StringVectorToString(const std::vector<std::string>& vec_str);
 
 // Calculates the p2p file id from payload hash and size
 std::string CalculateP2PFileId(const brillo::Blob& payload_hash,
@@ -86,11 +81,14 @@ bool ReadAll(
 
 // Calls pread() repeatedly until count bytes are read, or EOF is reached.
 // Returns number of bytes read in *bytes_read. Returns true on success.
-bool PReadAll(int fd, void* buf, size_t count, off_t offset,
-              ssize_t* out_bytes_read);
+bool PReadAll(
+    int fd, void* buf, size_t count, off_t offset, ssize_t* out_bytes_read);
 
-bool PReadAll(const FileDescriptorPtr& fd, void* buf, size_t count,
-              off_t offset, ssize_t* out_bytes_read);
+bool PReadAll(const FileDescriptorPtr& fd,
+              void* buf,
+              size_t count,
+              off_t offset,
+              ssize_t* out_bytes_read);
 
 // Opens |path| for reading and appends its entire content to the container
 // pointed to by |out_p|. Returns true upon successfully reading all of the
@@ -99,7 +97,9 @@ bool PReadAll(const FileDescriptorPtr& fd, void* buf, size_t count,
 // |size| is not -1, only up to |size| bytes are read in.
 bool ReadFile(const std::string& path, brillo::Blob* out_p);
 bool ReadFile(const std::string& path, std::string* out_p);
-bool ReadFileChunk(const std::string& path, off_t offset, off_t size,
+bool ReadFileChunk(const std::string& path,
+                   off_t offset,
+                   off_t size,
                    brillo::Blob* out_p);
 
 // Invokes |cmd| in a pipe and appends its stdout to the container pointed to by
@@ -132,13 +132,6 @@ bool IsSymlink(const char* path);
 // only returns true if "/dev/ubi%d_0" becomes available in |timeout| seconds.
 bool TryAttachingUbiVolume(int volume_num, int timeout);
 
-// Setup the directory |new_root_temp_dir| to be used as the root directory for
-// temporary files instead of the system's default. If the directory doesn't
-// exists, it will be created when first used.
-// NOTE: The memory pointed by |new_root_temp_dir| must be available until this
-// function is called again with a different value.
-void SetRootTempDir(const char* new_root_temp_dir);
-
 // If |base_filename_template| is neither absolute (starts with "/") nor
 // explicitly relative to the current working directory (starts with "./" or
 // "../"), then it is prepended the system's temporary directory. On success,
@@ -167,8 +160,7 @@ bool SplitPartitionName(const std::string& partition_name,
 // {"/dev/sda", 1} => "/dev/sda1"
 // {"/dev/mmcblk2", 12} => "/dev/mmcblk2p12"
 // Returns empty string when invalid parameters are passed in
-std::string MakePartitionName(const std::string& disk_name,
-                              int partition_num);
+std::string MakePartitionName(const std::string& disk_name, int partition_num);
 
 // Similar to "MakePartitionName" but returns a name that is suitable for
 // mounting. On NAND system we can write to "/dev/ubiX_0", which is what
@@ -229,12 +221,12 @@ inline void HexDumpVector(const brillo::Blob& vect) {
   HexDumpArray(vect.data(), vect.size());
 }
 
-template<typename T>
-bool VectorIndexOf(const std::vector<T>& vect, const T& value,
+template <typename T>
+bool VectorIndexOf(const std::vector<T>& vect,
+                   const T& value,
                    typename std::vector<T>::size_type* out_index) {
-  typename std::vector<T>::const_iterator it = std::find(vect.begin(),
-                                                         vect.end(),
-                                                         value);
+  typename std::vector<T>::const_iterator it =
+      std::find(vect.begin(), vect.end(), value);
   if (it == vect.end()) {
     return false;
   } else {
@@ -275,14 +267,6 @@ std::string FormatTimeDelta(base::TimeDelta delta);
 // it'll return the same value again.
 ErrorCode GetBaseErrorCode(ErrorCode code);
 
-// Decodes the data in |base64_encoded| and stores it in a temporary
-// file. Returns false if the given data is empty, not well-formed
-// base64 or if an error occurred. If true is returned, the decoded
-// data is stored in the file returned in |out_path|. The file should
-// be deleted when no longer needed.
-bool DecodeAndStoreBase64String(const std::string& base64_encoded,
-                                base::FilePath *out_path);
-
 // Converts |time| to an Omaha InstallDate which is defined as "the
 // number of PST8PDT calendar weeks since Jan 1st 2007 0:00 PST, times
 // seven" with PST8PDT defined as "Pacific Time" (e.g. UTC-07:00 if
@@ -298,7 +282,7 @@ bool DecodeAndStoreBase64String(const std::string& base64_encoded,
 // into account so the result may up to one hour off. This is because
 // the glibc date and timezone routines depend on the TZ environment
 // variable and changing environment variables is not thread-safe.
-bool ConvertToOmahaInstallDate(base::Time time, int *out_num_days);
+bool ConvertToOmahaInstallDate(base::Time time, int* out_num_days);
 
 // Look for the minor version value in the passed |store| and set
 // |minor_version| to that value. Return whether the value was found and valid.
@@ -309,8 +293,10 @@ bool GetMinorVersion(const brillo::KeyValueStore& store,
 // extents are read from the file at |path|. |out_data_size| is the size of
 // |out_data|. Returns false if the number of bytes to read given in
 // |extents| does not equal |out_data_size|.
-bool ReadExtents(const std::string& path, const std::vector<Extent>& extents,
-                 brillo::Blob* out_data, ssize_t out_data_size,
+bool ReadExtents(const std::string& path,
+                 const std::vector<Extent>& extents,
+                 brillo::Blob* out_data,
+                 ssize_t out_data_size,
                  size_t block_size);
 
 // Read the current boot identifier and store it in |boot_id|. This identifier
@@ -342,7 +328,6 @@ void ParseRollbackKeyVersion(const std::string& raw_version,
 
 }  // namespace utils
 
-
 // Utility class to close a file descriptor
 class ScopedFdCloser {
  public:
@@ -352,6 +337,7 @@ class ScopedFdCloser {
       *fd_ = -1;
   }
   void set_should_close(bool should_close) { should_close_ = should_close; }
+
  private:
   int* fd_;
   bool should_close_ = true;
@@ -362,8 +348,7 @@ class ScopedFdCloser {
 class ScopedPathUnlinker {
  public:
   explicit ScopedPathUnlinker(const std::string& path)
-      : path_(path),
-        should_remove_(true) {}
+      : path_(path), should_remove_(true) {}
   ~ScopedPathUnlinker() {
     if (should_remove_ && unlink(path_.c_str()) < 0) {
       PLOG(ERROR) << "Unable to unlink path " << path_;
@@ -386,7 +371,9 @@ class ScopedActionCompleter {
       : processor_(processor),
         action_(action),
         code_(ErrorCode::kError),
-        should_complete_(true) {}
+        should_complete_(true) {
+    CHECK(processor_);
+  }
   ~ScopedActionCompleter() {
     if (should_complete_)
       processor_->ActionComplete(action_, code_);
@@ -407,54 +394,54 @@ class ScopedActionCompleter {
 
 }  // namespace chromeos_update_engine
 
-#define TEST_AND_RETURN_FALSE_ERRNO(_x)                                        \
-  do {                                                                         \
-    bool _success = static_cast<bool>(_x);                                     \
-    if (!_success) {                                                           \
-      std::string _msg =                                                       \
-          chromeos_update_engine::utils::ErrnoNumberAsString(errno);           \
-      LOG(ERROR) << #_x " failed: " << _msg;                                   \
-      return false;                                                            \
-    }                                                                          \
+#define TEST_AND_RETURN_FALSE_ERRNO(_x)                              \
+  do {                                                               \
+    bool _success = static_cast<bool>(_x);                           \
+    if (!_success) {                                                 \
+      std::string _msg =                                             \
+          chromeos_update_engine::utils::ErrnoNumberAsString(errno); \
+      LOG(ERROR) << #_x " failed: " << _msg;                         \
+      return false;                                                  \
+    }                                                                \
   } while (0)
 
-#define TEST_AND_RETURN_FALSE(_x)                                              \
-  do {                                                                         \
-    bool _success = static_cast<bool>(_x);                                     \
-    if (!_success) {                                                           \
-      LOG(ERROR) << #_x " failed.";                                            \
-      return false;                                                            \
-    }                                                                          \
+#define TEST_AND_RETURN_FALSE(_x)          \
+  do {                                     \
+    bool _success = static_cast<bool>(_x); \
+    if (!_success) {                       \
+      LOG(ERROR) << #_x " failed.";        \
+      return false;                        \
+    }                                      \
   } while (0)
 
-#define TEST_AND_RETURN_ERRNO(_x)                                              \
-  do {                                                                         \
-    bool _success = static_cast<bool>(_x);                                     \
-    if (!_success) {                                                           \
-      std::string _msg =                                                       \
-          chromeos_update_engine::utils::ErrnoNumberAsString(errno);           \
-      LOG(ERROR) << #_x " failed: " << _msg;                                   \
-      return;                                                                  \
-    }                                                                          \
+#define TEST_AND_RETURN_ERRNO(_x)                                    \
+  do {                                                               \
+    bool _success = static_cast<bool>(_x);                           \
+    if (!_success) {                                                 \
+      std::string _msg =                                             \
+          chromeos_update_engine::utils::ErrnoNumberAsString(errno); \
+      LOG(ERROR) << #_x " failed: " << _msg;                         \
+      return;                                                        \
+    }                                                                \
   } while (0)
 
-#define TEST_AND_RETURN(_x)                                                    \
-  do {                                                                         \
-    bool _success = static_cast<bool>(_x);                                     \
-    if (!_success) {                                                           \
-      LOG(ERROR) << #_x " failed.";                                            \
-      return;                                                                  \
-    }                                                                          \
+#define TEST_AND_RETURN(_x)                \
+  do {                                     \
+    bool _success = static_cast<bool>(_x); \
+    if (!_success) {                       \
+      LOG(ERROR) << #_x " failed.";        \
+      return;                              \
+    }                                      \
   } while (0)
 
-#define TEST_AND_RETURN_FALSE_ERRCODE(_x)                                      \
-  do {                                                                         \
-    errcode_t _error = (_x);                                                   \
-    if (_error) {                                                              \
-      errno = _error;                                                          \
-      LOG(ERROR) << #_x " failed: " << _error;                                 \
-      return false;                                                            \
-    }                                                                          \
+#define TEST_AND_RETURN_FALSE_ERRCODE(_x)      \
+  do {                                         \
+    errcode_t _error = (_x);                   \
+    if (_error) {                              \
+      errno = _error;                          \
+      LOG(ERROR) << #_x " failed: " << _error; \
+      return false;                            \
+    }                                          \
   } while (0)
 
 #endif  // UPDATE_ENGINE_COMMON_UTILS_H_

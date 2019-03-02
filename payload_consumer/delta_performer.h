@@ -60,6 +60,7 @@ class DeltaPerformer : public FileWriter {
   // operations. They must add up to one hundred (100).
   static const unsigned kProgressDownloadWeight;
   static const unsigned kProgressOperationsWeight;
+  static const uint64_t kCheckpointFrequencySeconds;
 
   DeltaPerformer(PrefsInterface* prefs,
                  BootControlInterface* boot_control,
@@ -85,7 +86,7 @@ class DeltaPerformer : public FileWriter {
 
   // FileWriter's Write implementation that returns a more specific |error| code
   // in case of failures in Write operation.
-  bool Write(const void* bytes, size_t count, ErrorCode *error) override;
+  bool Write(const void* bytes, size_t count, ErrorCode* error) override;
 
   // Wrapper around close. Returns 0 on success or -errno on error.
   // Closes both 'path' given to Open() and the kernel path.
@@ -191,7 +192,8 @@ class DeltaPerformer : public FileWriter {
 
   // If |op_result| is false, emits an error message using |op_type_name| and
   // sets |*error| accordingly. Otherwise does nothing. Returns |op_result|.
-  bool HandleOpResult(bool op_result, const char* op_type_name,
+  bool HandleOpResult(bool op_result,
+                      const char* op_type_name,
                       ErrorCode* error);
 
   // Logs the progress of downloading/applying an update.
@@ -256,20 +258,20 @@ class DeltaPerformer : public FileWriter {
 
   // Checkpoints the update progress into persistent storage to allow this
   // update attempt to be resumed after reboot.
-  bool CheckpointUpdateProgress();
+  // If |force| is false, checkpoint may be throttled.
+  bool CheckpointUpdateProgress(bool force);
 
   // Primes the required update state. Returns true if the update state was
   // successfully initialized to a saved resume state or if the update is a new
   // update. Returns false otherwise.
   bool PrimeUpdateState();
 
-  // If the Omaha response contains a public RSA key and we're allowed
-  // to use it (e.g. if we're in developer mode), extract the key from
-  // the response and store it in a temporary file and return true. In
-  // the affirmative the path to the temporary file is stored in
-  // |out_tmp_key| and it is the responsibility of the caller to clean
-  // it up.
-  bool GetPublicKeyFromResponse(base::FilePath *out_tmp_key);
+  // Get the public key to be used to verify metadata signature or payload
+  // signature. Always use |public_key_path_| if exists, otherwise if the Omaha
+  // response contains a public RSA key and we're allowed to use it (e.g. if
+  // we're in developer mode), decode the key from the response and store it in
+  // |out_public_key|. Returns false on failures.
+  bool GetPublicKey(std::string* out_public_key);
 
   // After install_plan_ is filled with partition names and sizes, initialize
   // metadata of partitions and map necessary devices before opening devices.
@@ -398,7 +400,13 @@ class DeltaPerformer : public FileWriter {
   // and the actual point in time for the next forced log to be emitted.
   const base::TimeDelta forced_progress_log_wait_{
       base::TimeDelta::FromSeconds(kProgressLogTimeoutSeconds)};
-  base::Time forced_progress_log_time_;
+  base::TimeTicks forced_progress_log_time_;
+
+  // The frequency that we should write an update checkpoint (constant), and
+  // the point in time at which the next checkpoint should be written.
+  const base::TimeDelta update_checkpoint_wait_{
+      base::TimeDelta::FromSeconds(kCheckpointFrequencySeconds)};
+  base::TimeTicks update_checkpoint_time_;
 
   DISALLOW_COPY_AND_ASSIGN(DeltaPerformer);
 };

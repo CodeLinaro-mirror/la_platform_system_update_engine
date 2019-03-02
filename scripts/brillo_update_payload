@@ -90,7 +90,7 @@ die() {
 load_shflags() {
   local my_dir="$(dirname "$(readlink -f "$0")")"
   local path
-  for path in /usr/share/misc {/usr/lib/crosutils,"${my_dir}"}/lib/shflags; do
+  for path in /usr/share/misc "${my_dir}"/lib/shflags; do
     if [[ -r "${path}/shflags" ]]; then
       . "${path}/shflags" || die "Could not load ${path}/shflags."
       return
@@ -336,7 +336,7 @@ extract_image() {
 
   # Brillo images are zip files. We detect the 4-byte magic header of the zip
   # file.
-  local magic=$(head --bytes=4 "${image}" | hexdump -e '1/1 "%.2x"')
+  local magic=$(xxd -p -l4 "${image}")
   if [[ "${magic}" == "504b0304" ]]; then
     echo "Detected .zip file, extracting Brillo image."
     extract_image_brillo "$@"
@@ -371,12 +371,11 @@ extract_image_cros() {
 
   cros_generate_update_payload --extract \
     --image "${image}" \
-    --kern_path "${kernel}" --root_path "${root}" \
-    --work_dir "${FLAGS_work_dir}" --outside_chroot
+    --kern_path "${kernel}" --root_path "${root}"
 
-  # Chrome OS uses major_version 1 payloads for all versions, even if the
-  # updater supports a newer major version.
-  FORCE_MAJOR_VERSION="1"
+  # Chrome OS now uses major_version 2 payloads for all boards.
+  # See crbug.com/794404 for more information.
+  FORCE_MAJOR_VERSION="2"
 
   eval ${partitions_array}[kernel]=\""${kernel}"\"
   eval ${partitions_array}[root]=\""${root}"\"
@@ -419,7 +418,7 @@ extract_partition_brillo() {
 
   # If the partition is stored as an Android sparse image file, we need to
   # convert them to a raw image for the update.
-  local magic=$(head --bytes=4 "${part_file}" | hexdump -e '1/1 "%.2x"')
+  local magic=$(xxd -p -l4 "${part_file}")
   if [[ "${magic}" == "3aff26ed" ]]; then
     local temp_sparse=$(create_tempfile "${part}.sparse.XXXXXX")
     echo "Converting Android sparse image ${part}.img to RAW."

@@ -33,6 +33,7 @@
 #include <list>
 #include <map>
 #include <memory>
+#include <numeric>
 #include <utility>
 
 #include <base/files/file_util.h>
@@ -87,8 +88,10 @@ const int kBrotliCompressionQuality = 11;
 // removed, which may cause the extent to be trimmed, split or removed entirely.
 // The value of |*idx_p| is updated to point to the next extent to be processed.
 // Returns true iff the next extent to process is a new or updated one.
-bool ProcessExtentBlockRange(vector<Extent>* extents, size_t* idx_p,
-                             const bool do_remove, uint64_t range_start,
+bool ProcessExtentBlockRange(vector<Extent>* extents,
+                             size_t* idx_p,
+                             const bool do_remove,
+                             uint64_t range_start,
                              uint64_t range_end) {
   size_t idx = *idx_p;
   uint64_t start_block = (*extents)[idx].start_block();
@@ -147,17 +150,17 @@ size_t RemoveIdenticalBlockRanges(vector<Extent>* src_extents,
 
     uint64_t src_num_blocks = (*src_extents)[src_idx].num_blocks();
     uint64_t dst_num_blocks = (*dst_extents)[dst_idx].num_blocks();
-    uint64_t min_num_blocks = std::min(src_num_blocks - src_offset,
-                                       dst_num_blocks - dst_offset);
+    uint64_t min_num_blocks =
+        std::min(src_num_blocks - src_offset, dst_num_blocks - dst_offset);
     uint64_t prev_src_offset = src_offset;
     uint64_t prev_dst_offset = dst_offset;
     src_offset += min_num_blocks;
     dst_offset += min_num_blocks;
 
-    bool new_src = ProcessExtentBlockRange(src_extents, &src_idx, do_remove,
-                                           prev_src_offset, src_offset);
-    bool new_dst = ProcessExtentBlockRange(dst_extents, &dst_idx, do_remove,
-                                           prev_dst_offset, dst_offset);
+    bool new_src = ProcessExtentBlockRange(
+        src_extents, &src_idx, do_remove, prev_src_offset, src_offset);
+    bool new_dst = ProcessExtentBlockRange(
+        dst_extents, &dst_idx, do_remove, prev_dst_offset, dst_offset);
     if (new_src) {
       src_offset = 0;
     }
@@ -205,6 +208,26 @@ bool IsDiffOperationBetter(const InstallOperation& op,
          old_blob_size;
 }
 
+// Returns the levenshtein distance between string |a| and |b|.
+// https://en.wikipedia.org/wiki/Levenshtein_distance
+int LevenshteinDistance(const string& a, const string& b) {
+  vector<int> distances(a.size() + 1);
+  std::iota(distances.begin(), distances.end(), 0);
+
+  for (size_t i = 1; i <= b.size(); i++) {
+    distances[0] = i;
+    int previous_distance = i - 1;
+    for (size_t j = 1; j <= a.size(); j++) {
+      int new_distance =
+          std::min({distances[j] + 1,
+                    distances[j - 1] + 1,
+                    previous_distance + (a[j - 1] == b[i - 1] ? 0 : 1)});
+      previous_distance = distances[j];
+      distances[j] = new_distance;
+    }
+  }
+  return distances.back();
+}
 }  // namespace
 
 namespace diff_utils {
@@ -276,7 +299,7 @@ class FileDeltaProcessor : public base::DelegateSimpleThread::Delegate {
 
 void FileDeltaProcessor::Run() {
   TEST_AND_RETURN(blob_file_ != nullptr);
-  base::Time start = base::Time::Now();
+  base::TimeTicks start = base::TimeTicks::Now();
 
   if (!DeltaReadFile(&file_aops_,
                      old_part_,
@@ -305,8 +328,7 @@ void FileDeltaProcessor::Run() {
   }
 
   LOG(INFO) << "Encoded file " << name_ << " (" << new_extents_blocks_
-            << " blocks) in " << (base::Time::Now() - start).InSecondsF()
-            << " seconds.";
+            << " blocks) in " << (base::TimeTicks::Now() - start);
 }
 
 bool FileDeltaProcessor::MergeOperation(vector<AnnotatedOperation>* aops) {
@@ -315,6 +337,33 @@ bool FileDeltaProcessor::MergeOperation(vector<AnnotatedOperation>* aops) {
   aops->reserve(aops->size() + file_aops_.size());
   std::move(file_aops_.begin(), file_aops_.end(), std::back_inserter(*aops));
   return true;
+}
+
+FilesystemInterface::File GetOldFile(
+    const map<string, FilesystemInterface::File>& old_files_map,
+    const string& new_file_name) {
+  if (old_files_map.empty())
+    return {};
+
+  auto old_file_iter = old_files_map.find(new_file_name);
+  if (old_file_iter != old_files_map.end())
+    return old_file_iter->second;
+
+  // No old file match for the new file name, use a similar file with the
+  // shortest levenshtein distance.
+  // This works great if the file has version number in it, but even for
+  // a completely new file, using a similar file can still help.
+  int min_distance = new_file_name.size();
+  const FilesystemInterface::File* old_file;
+  for (const auto& pair : old_files_map) {
+    int distance = LevenshteinDistance(new_file_name, pair.first);
+    if (distance < min_distance) {
+      min_distance = distance;
+      old_file = &pair.second;
+    }
+  }
+  LOG(INFO) << "Using " << old_file->name << " as source for " << new_file_name;
+  return *old_file;
 }
 
 bool DeltaReadPartition(vector<AnnotatedOperation>* aops,
@@ -339,23 +388,24 @@ bool DeltaReadPartition(vector<AnnotatedOperation>* aops,
     new_visited_blocks.AddExtent(new_part.verity.fec_extent);
   }
 
-  TEST_AND_RETURN_FALSE(DeltaMovedAndZeroBlocks(
-      aops,
-      old_part.path,
-      new_part.path,
-      old_part.size / kBlockSize,
-      new_part.size / kBlockSize,
-      soft_chunk_blocks,
-      version,
-      blob_file,
-      &old_visited_blocks,
-      &new_visited_blocks));
+  ExtentRanges old_zero_blocks;
+  TEST_AND_RETURN_FALSE(DeltaMovedAndZeroBlocks(aops,
+                                                old_part.path,
+                                                new_part.path,
+                                                old_part.size / kBlockSize,
+                                                new_part.size / kBlockSize,
+                                                soft_chunk_blocks,
+                                                version,
+                                                blob_file,
+                                                &old_visited_blocks,
+                                                &new_visited_blocks,
+                                                &old_zero_blocks));
 
   bool puffdiff_allowed = version.OperationAllowed(InstallOperation::PUFFDIFF);
   map<string, FilesystemInterface::File> old_files_map;
   if (old_part.fs_interface) {
     vector<FilesystemInterface::File> old_files;
-    TEST_AND_RETURN_FALSE(deflate_utils::PreprocessParitionFiles(
+    TEST_AND_RETURN_FALSE(deflate_utils::PreprocessPartitionFiles(
         old_part, &old_files, puffdiff_allowed));
     for (const FilesystemInterface::File& file : old_files)
       old_files_map[file.name] = file;
@@ -363,7 +413,7 @@ bool DeltaReadPartition(vector<AnnotatedOperation>* aops,
 
   TEST_AND_RETURN_FALSE(new_part.fs_interface);
   vector<FilesystemInterface::File> new_files;
-  TEST_AND_RETURN_FALSE(deflate_utils::PreprocessParitionFiles(
+  TEST_AND_RETURN_FALSE(deflate_utils::PreprocessPartitionFiles(
       new_part, &new_files, puffdiff_allowed));
 
   list<FileDeltaProcessor> file_delta_processors;
@@ -380,8 +430,8 @@ bool DeltaReadPartition(vector<AnnotatedOperation>* aops,
     // data blocks (for example, symlinks bigger than 60 bytes in ext2) are
     // handled as normal files. We also ignore blocks that were already
     // processed by a previous file.
-    vector<Extent> new_file_extents = FilterExtentRanges(
-        new_file.extents, new_visited_blocks);
+    vector<Extent> new_file_extents =
+        FilterExtentRanges(new_file.extents, new_visited_blocks);
     new_visited_blocks.AddExtents(new_file_extents);
 
     if (new_file_extents.empty())
@@ -395,13 +445,14 @@ bool DeltaReadPartition(vector<AnnotatedOperation>* aops,
     // from using a graph/cycle detection/etc to generate diffs, and at that
     // time, it will be easy (non-complex) to have many operations read
     // from the same source blocks. At that time, this code can die. -adlr
-    auto old_file = old_files_map[new_file.name];
+    FilesystemInterface::File old_file =
+        GetOldFile(old_files_map, new_file.name);
     vector<Extent> old_file_extents;
     if (version.InplaceUpdate())
       old_file_extents =
           FilterExtentRanges(old_file.extents, old_visited_blocks);
     else
-      old_file_extents = old_file.extents;
+      old_file_extents = FilterExtentRanges(old_file.extents, old_zero_blocks);
     old_visited_blocks.AddExtents(old_file_extents);
 
     file_delta_processors.emplace_back(old_part.path,
@@ -478,7 +529,8 @@ bool DeltaMovedAndZeroBlocks(vector<AnnotatedOperation>* aops,
                              const PayloadVersion& version,
                              BlobFileWriter* blob_file,
                              ExtentRanges* old_visited_blocks,
-                             ExtentRanges* new_visited_blocks) {
+                             ExtentRanges* new_visited_blocks,
+                             ExtentRanges* old_zero_blocks) {
   vector<BlockMapping::BlockId> old_block_ids;
   vector<BlockMapping::BlockId> new_block_ids;
   TEST_AND_RETURN_FALSE(MapPartitionBlocks(old_part,
@@ -509,7 +561,7 @@ bool DeltaMovedAndZeroBlocks(vector<AnnotatedOperation>* aops,
   // is a block from the new partition.
   map<BlockMapping::BlockId, vector<uint64_t>> old_blocks_map;
 
-  for (uint64_t block = old_num_blocks; block-- > 0; ) {
+  for (uint64_t block = old_num_blocks; block-- > 0;) {
     if (old_block_ids[block] != 0 && !old_visited_blocks->ContainsBlock(block))
       old_blocks_map[old_block_ids[block]].push_back(block);
 
@@ -518,8 +570,9 @@ bool DeltaMovedAndZeroBlocks(vector<AnnotatedOperation>* aops,
     // importantly, these could sometimes be blocks discarded in the SSD which
     // would read non-zero values.
     if (old_block_ids[block] == 0)
-      old_visited_blocks->AddBlock(block);
+      old_zero_blocks->AddBlock(block);
   }
+  old_visited_blocks->AddRanges(*old_zero_blocks);
 
   // The collection of blocks in the new partition with just zeros. This is a
   // common case for free-space that's also problematic for bsdiff, so we want
@@ -655,15 +708,15 @@ bool DeltaReadFile(vector<AnnotatedOperation>* aops,
     chunk_blocks = total_blocks;
 
   for (uint64_t block_offset = 0; block_offset < total_blocks;
-      block_offset += chunk_blocks) {
+       block_offset += chunk_blocks) {
     // Split the old/new file in the same chunks. Note that this could drop
     // some information from the old file used for the new chunk. If the old
     // file is smaller (or even empty when there's no old file) the chunk will
     // also be empty.
-    vector<Extent> old_extents_chunk = ExtentsSublist(
-        old_extents, block_offset, chunk_blocks);
-    vector<Extent> new_extents_chunk = ExtentsSublist(
-        new_extents, block_offset, chunk_blocks);
+    vector<Extent> old_extents_chunk =
+        ExtentsSublist(old_extents, block_offset, chunk_blocks);
+    vector<Extent> new_extents_chunk =
+        ExtentsSublist(new_extents, block_offset, chunk_blocks);
     NormalizeExtents(&old_extents_chunk);
     NormalizeExtents(&new_extents_chunk);
 
@@ -680,8 +733,7 @@ bool DeltaReadFile(vector<AnnotatedOperation>* aops,
     // Check if the operation writes nothing.
     if (operation.dst_extents_size() == 0) {
       if (operation.type() == InstallOperation::MOVE) {
-        LOG(INFO) << "Empty MOVE operation ("
-                  << name << "), skipping";
+        LOG(INFO) << "Empty MOVE operation (" << name << "), skipping";
         continue;
       } else {
         LOG(ERROR) << "Empty non-MOVE operation";
@@ -693,8 +745,8 @@ bool DeltaReadFile(vector<AnnotatedOperation>* aops,
     AnnotatedOperation aop;
     aop.name = name;
     if (static_cast<uint64_t>(chunk_blocks) < total_blocks) {
-      aop.name = base::StringPrintf("%s:%" PRIu64,
-                                    name.c_str(), block_offset / chunk_blocks);
+      aop.name = base::StringPrintf(
+          "%s:%" PRIu64, name.c_str(), block_offset / chunk_blocks);
     }
     aop.op = operation;
 
@@ -819,9 +871,11 @@ bool ReadExtentsToDiff(const string& old_part,
   brillo::Blob old_data;
   if (blocks_to_read > 0) {
     // Read old data.
-    TEST_AND_RETURN_FALSE(
-        utils::ReadExtents(old_part, src_extents, &old_data,
-                           kBlockSize * blocks_to_read, kBlockSize));
+    TEST_AND_RETURN_FALSE(utils::ReadExtents(old_part,
+                                             src_extents,
+                                             &old_data,
+                                             kBlockSize * blocks_to_read,
+                                             kBlockSize));
     if (old_data == new_data) {
       // No change in data.
       operation.set_type(version.OperationAllowed(InstallOperation::SOURCE_COPY)
@@ -885,6 +939,15 @@ bool ReadExtentsToDiff(const string& old_part,
         puffin::RemoveEqualBitExtents(
             old_data, new_data, &src_deflates, &dst_deflates);
 
+        // See crbug.com/915559.
+        if (version.minor <= kPuffdiffMinorPayloadVersion) {
+          TEST_AND_RETURN_FALSE(puffin::RemoveDeflatesWithBadDistanceCaches(
+              old_data, &src_deflates));
+
+          TEST_AND_RETURN_FALSE(puffin::RemoveDeflatesWithBadDistanceCaches(
+              new_data, &dst_deflates));
+        }
+
         // Only Puffdiff if both files have at least one deflate left.
         if (!src_deflates.empty() && !dst_deflates.empty()) {
           brillo::Blob puffdiff_delta;
@@ -915,8 +978,8 @@ bool ReadExtentsToDiff(const string& old_part,
 
   // Remove identical src/dst block ranges in MOVE operations.
   if (operation.type() == InstallOperation::MOVE) {
-    auto removed_bytes = RemoveIdenticalBlockRanges(
-        &src_extents, &dst_extents, new_data.size());
+    auto removed_bytes =
+        RemoveIdenticalBlockRanges(&src_extents, &dst_extents, new_data.size());
     operation.set_src_length(old_data.size() - removed_bytes);
     operation.set_dst_length(new_data.size() - removed_bytes);
   }
@@ -954,8 +1017,7 @@ bool IsAReplaceOperation(InstallOperation_Type op_type) {
 }
 
 bool IsNoSourceOperation(InstallOperation_Type op_type) {
-  return (IsAReplaceOperation(op_type) ||
-          op_type == InstallOperation::ZERO ||
+  return (IsAReplaceOperation(op_type) || op_type == InstallOperation::ZERO ||
           op_type == InstallOperation::DISCARD);
 }
 
@@ -967,11 +1029,12 @@ bool IsNoopOperation(const InstallOperation& op) {
 }
 
 void FilterNoopOperations(vector<AnnotatedOperation>* ops) {
-  ops->erase(
-      std::remove_if(
-          ops->begin(), ops->end(),
-          [](const AnnotatedOperation& aop){return IsNoopOperation(aop.op);}),
-      ops->end());
+  ops->erase(std::remove_if(ops->begin(),
+                            ops->end(),
+                            [](const AnnotatedOperation& aop) {
+                              return IsNoopOperation(aop.op);
+                            }),
+             ops->end());
 }
 
 bool InitializePartitionInfo(const PartitionConfig& part, PartitionInfo* info) {

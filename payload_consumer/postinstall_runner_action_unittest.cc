@@ -37,6 +37,7 @@
 #include "update_engine/common/constants.h"
 #include "update_engine/common/fake_boot_control.h"
 #include "update_engine/common/fake_hardware.h"
+#include "update_engine/common/subprocess.h"
 #include "update_engine/common/test_utils.h"
 #include "update_engine/common/utils.h"
 #include "update_engine/mock_payload_state.h"
@@ -254,6 +255,7 @@ TEST_F(PostinstallRunnerActionTest, RunAsRootSimpleTest) {
 
   // Since powerwash_required was false, this should not trigger a powerwash.
   EXPECT_FALSE(fake_hardware_.IsPowerwashScheduled());
+  EXPECT_FALSE(fake_hardware_.GetIsRollbackPowerwashScheduled());
 }
 
 TEST_F(PostinstallRunnerActionTest, RunAsRootRunSymlinkFileTest) {
@@ -273,6 +275,7 @@ TEST_F(PostinstallRunnerActionTest, RunAsRootPowerwashRequiredTest) {
 
   // Check that powerwash was scheduled.
   EXPECT_TRUE(fake_hardware_.IsPowerwashScheduled());
+  EXPECT_FALSE(fake_hardware_.GetIsRollbackPowerwashScheduled());
 }
 
 TEST_F(PostinstallRunnerActionTest, RunAsRootRollbackTest) {
@@ -285,8 +288,9 @@ TEST_F(PostinstallRunnerActionTest, RunAsRootRollbackTest) {
                        /*is_rollback=*/true);
   EXPECT_EQ(ErrorCode::kSuccess, processor_delegate_.code_);
 
-  // Check that powerwash was scheduled.
+  // Check that powerwash was scheduled and that it's a rollback powerwash.
   EXPECT_TRUE(fake_hardware_.IsPowerwashScheduled());
+  EXPECT_TRUE(fake_hardware_.GetIsRollbackPowerwashScheduled());
 }
 
 // Runs postinstall from a partition file that doesn't mount, so it should
@@ -298,6 +302,7 @@ TEST_F(PostinstallRunnerActionTest, RunAsRootCantMountTest) {
   // In case of failure, Postinstall should not signal a powerwash even if it
   // was requested.
   EXPECT_FALSE(fake_hardware_.IsPowerwashScheduled());
+  EXPECT_FALSE(fake_hardware_.GetIsRollbackPowerwashScheduled());
 }
 
 // Check that the failures from the postinstall script cause the action to

@@ -88,9 +88,7 @@ struct OmahaEvent {
         result(kResultSuccess),
         error_code(ErrorCode::kSuccess) {}
   OmahaEvent(Type in_type, Result in_result, ErrorCode in_error_code)
-      : type(in_type),
-        result(in_result),
-        error_code(in_error_code) {}
+      : type(in_type), result(in_result), error_code(in_error_code) {}
 
   Type type;
   Result result;
@@ -105,7 +103,7 @@ class PrefsInterface;
 // This struct is declared in the .cc file.
 struct OmahaParserData;
 
-template<>
+template <>
 class ActionTraits<OmahaRequestAction> {
  public:
   // Takes parameters on the input pipe.
@@ -175,7 +173,7 @@ class OmahaRequestAction : public Action<OmahaRequestAction>,
                      const void* bytes,
                      size_t length) override;
 
-  void TransferComplete(HttpFetcher *fetcher, bool successful) override;
+  void TransferComplete(HttpFetcher* fetcher, bool successful) override;
 
   // Returns true if this is an Event request, false if it's an UpdateCheck.
   bool IsEvent() const { return event_.get() != nullptr; }
@@ -215,12 +213,12 @@ class OmahaRequestAction : public Action<OmahaRequestAction>,
 
   // Returns True if the kPrefsInstallDateDays state variable is set,
   // False otherwise.
-  static bool HasInstallDate(SystemState *system_state);
+  static bool HasInstallDate(SystemState* system_state);
 
   // Writes |install_date_days| into the kPrefsInstallDateDays state
   // variable and emits an UMA stat for the |source| used. Returns
   // True if the value was written, False if an error occurred.
-  static bool PersistInstallDate(SystemState *system_state,
+  static bool PersistInstallDate(SystemState* system_state,
                                  int install_date_days,
                                  InstallDateProvisioningSource source);
 
@@ -303,8 +301,8 @@ class OmahaRequestAction : public Action<OmahaRequestAction>,
   void OnLookupPayloadViaP2PCompleted(const std::string& url);
 
   // Returns true if the current update should be ignored.
-  bool ShouldIgnoreUpdate(ErrorCode* error,
-                          const OmahaResponse& response) const;
+  bool ShouldIgnoreUpdate(const OmahaResponse& response,
+                          ErrorCode* error) const;
 
   // Return true if updates are allowed by user preferences.
   bool IsUpdateAllowedOverCellularByPrefs(const OmahaResponse& response) const;
@@ -321,6 +319,11 @@ class OmahaRequestAction : public Action<OmahaRequestAction>,
   // Sets the appropriate max kernel key version based on whether rollback is
   // enabled.
   void SetMaxKernelKeyVersionForRollback() const;
+
+  // Reads and returns the kPrefsUpdateFirstSeenAt pref if the pref currently
+  // exists. Otherwise saves the current wallclock time to the
+  // kPrefsUpdateFirstSeenAt pref and returns it as a base::Time object.
+  base::Time LoadOrPersistUpdateFirstSeenAtPref() const;
 
   // Global system context.
   SystemState* system_state_;

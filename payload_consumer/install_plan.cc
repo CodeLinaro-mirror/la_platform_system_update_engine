@@ -100,7 +100,8 @@ bool InstallPlan::LoadPartitionsFromSlots(BootControlInterface* boot_control) {
   for (Partition& partition : partitions) {
     if (source_slot != BootControlInterface::kInvalidSlot) {
       result = boot_control->GetPartitionDevice(
-          partition.name, source_slot, &partition.source_path) && result;
+                   partition.name, source_slot, &partition.source_path) &&
+               result;
     } else {
       partition.source_path.clear();
     }
@@ -108,7 +109,8 @@ bool InstallPlan::LoadPartitionsFromSlots(BootControlInterface* boot_control) {
     if (target_slot != BootControlInterface::kInvalidSlot &&
         partition.target_size > 0) {
       result = boot_control->GetPartitionDevice(
-          partition.name, target_slot, &partition.target_path) && result;
+                   partition.name, target_slot, &partition.target_path) &&
+               result;
     } else {
       partition.target_path.clear();
     }
@@ -118,12 +120,9 @@ bool InstallPlan::LoadPartitionsFromSlots(BootControlInterface* boot_control) {
 
 bool InstallPlan::Partition::operator==(
     const InstallPlan::Partition& that) const {
-  return (name == that.name &&
-          source_path == that.source_path &&
-          source_size == that.source_size &&
-          source_hash == that.source_hash &&
-          target_path == that.target_path &&
-          target_size == that.target_size &&
+  return (name == that.name && source_path == that.source_path &&
+          source_size == that.source_size && source_hash == that.source_hash &&
+          target_path == that.target_path && target_size == that.target_size &&
           target_hash == that.target_hash &&
           run_postinstall == that.run_postinstall &&
           postinstall_path == that.postinstall_path &&

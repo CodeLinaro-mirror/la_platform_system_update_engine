@@ -226,7 +226,6 @@ TEST_F(MetricsReporterOmahaTest, ReportUpdateAttemptMetrics) {
                         _))
       .Times(2);
 
-
   // Check the report of attempt result.
   EXPECT_CALL(
       *mock_metrics_lib_,
@@ -498,6 +497,45 @@ TEST_F(MetricsReporterOmahaTest, ReportKeyVersionMetrics) {
   reporter_.ReportKeyVersionMetrics(kernel_min_version,
                                     kernel_max_rollforward_version,
                                     kernel_max_rollforward_success);
+}
+
+TEST_F(MetricsReporterOmahaTest, ReportEnterpriseUpdateSeenToDownloadDays) {
+  constexpr int kDaysToUpdate = 10;
+  constexpr int kMinBucket = 1;
+  constexpr int kMaxBucket = 6 * 30;  // approximately 6 months
+  constexpr int kNumBuckets = 50;
+
+  EXPECT_CALL(*mock_metrics_lib_,
+              SendToUMA(metrics::kMetricSuccessfulUpdateDurationFromSeenDays,
+                        kDaysToUpdate,
+                        kMinBucket,
+                        kMaxBucket,
+                        kNumBuckets))
+      .Times(1);
+
+  reporter_.ReportEnterpriseUpdateSeenToDownloadDays(
+      false /* has_time_restriction_policy */, kDaysToUpdate);
+}
+
+TEST_F(MetricsReporterOmahaTest,
+       ReportEnterpriseTimeRestrictedUpdateSeenToDownloadTime) {
+  const int kDaysToUpdate = 15;
+  constexpr int kMinBucket = 1;
+  constexpr int kMaxBucket = 6 * 30;  // approximately 6 months
+  constexpr int kNumBuckets = 50;
+
+  EXPECT_CALL(
+      *mock_metrics_lib_,
+      SendToUMA(
+          metrics::kMetricSuccessfulUpdateDurationFromSeenTimeRestrictedDays,
+          kDaysToUpdate,
+          kMinBucket,
+          kMaxBucket,
+          kNumBuckets))
+      .Times(1);
+
+  reporter_.ReportEnterpriseUpdateSeenToDownloadDays(
+      true /* has_time_restriction_policy */, kDaysToUpdate);
 }
 
 }  // namespace chromeos_update_engine

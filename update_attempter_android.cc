@@ -25,7 +25,6 @@
 #include <base/bind.h>
 #include <base/logging.h>
 #include <base/strings/string_number_conversions.h>
-#include <brillo/bind_lambda.h>
 #include <brillo/data_encoding.h>
 #include <brillo/message_loops/message_loop.h>
 #include <brillo/strings/string_utils.h>
@@ -318,7 +317,7 @@ bool UpdateAttempterAndroid::ResetStatus(brillo::ErrorPtr* error) {
     case UpdateStatus::IDLE:
       return true;
 
-    case UpdateStatus::UPDATED_NEED_REBOOT:  {
+    case UpdateStatus::UPDATED_NEED_REBOOT: {
       // Remove the reboot marker so that if the machine is rebooted
       // after resetting to idle state, it doesn't go back to
       // UpdateStatus::UPDATED_NEED_REBOOT state.
@@ -332,14 +331,12 @@ bool UpdateAttempterAndroid::ResetStatus(brillo::ErrorPtr* error) {
       // Mark the current slot as successful again, since marking it as active
       // may reset the successful bit. We ignore the result of whether marking
       // the current slot as successful worked.
-      if (!boot_control_->MarkBootSuccessfulAsync(Bind([](bool successful){})))
+      if (!boot_control_->MarkBootSuccessfulAsync(Bind([](bool successful) {})))
         ret_value = false;
 
       if (!ret_value) {
         return LogAndSetError(
-            error,
-            FROM_HERE,
-            "Failed to reset the status to ");
+            error, FROM_HERE, "Failed to reset the status to ");
       }
 
       SetStatusAndNotify(UpdateStatus::IDLE);
@@ -397,8 +394,13 @@ bool UpdateAttempterAndroid::VerifyPayloadApplicable(
         "Failed to read metadata and signature from " + metadata_filename);
   }
   fd->Close();
-  errorcode = payload_metadata.ValidateMetadataSignature(
-      metadata, "", base::FilePath(constants::kUpdatePayloadPublicKeyPath));
+
+  string public_key;
+  if (!utils::ReadFile(constants::kUpdatePayloadPublicKeyPath, &public_key)) {
+    return LogAndSetError(error, FROM_HERE, "Failed to read public key.");
+  }
+  errorcode =
+      payload_metadata.ValidateMetadataSignature(metadata, "", public_key);
   if (errorcode != ErrorCode::kSuccess) {
     return LogAndSetError(error,
                           FROM_HERE,
@@ -798,6 +800,11 @@ void UpdateAttempterAndroid::UpdatePrefsAndReportUpdateMetricsOnReboot() {
   metrics_utils::LoadAndReportTimeToReboot(
       metrics_reporter_.get(), prefs_, clock_.get());
   ClearMetricsPrefs();
+
+  // Also reset the update progress if the build version has changed.
+  if (!DeltaPerformer::ResetUpdateProgress(prefs_, false)) {
+    LOG(WARNING) << "Unable to reset the update progress.";
+  }
 }
 
 // Save the update start time. Reset the reboot count and attempt number if the

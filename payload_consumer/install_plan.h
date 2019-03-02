@@ -46,7 +46,7 @@ struct InstallPlan {
 
   void Dump() const;
 
-  // Load the |source_path| and |target_path| of all |partitions| based on the
+  // Loads the |source_path| and |target_path| of all |partitions| based on the
   // |source_slot| and |target_slot| if available. Returns whether it succeeded
   // to load all the partitions for the valid slots.
   bool LoadPartitionsFromSlots(BootControlInterface* boot_control);
@@ -157,7 +157,7 @@ struct InstallPlan {
 
 class InstallPlanAction;
 
-template<>
+template <>
 class ActionTraits<InstallPlanAction> {
  public:
   // Takes the install plan as input
@@ -172,8 +172,8 @@ class ActionTraits<InstallPlanAction> {
 class InstallPlanAction : public Action<InstallPlanAction> {
  public:
   InstallPlanAction() {}
-  explicit InstallPlanAction(const InstallPlan& install_plan):
-    install_plan_(install_plan) {}
+  explicit InstallPlanAction(const InstallPlan& install_plan)
+      : install_plan_(install_plan) {}
 
   void PerformAction() override {
     if (HasOutputPipe()) {

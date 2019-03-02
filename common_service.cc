@@ -41,6 +41,7 @@ using base::StringPrintf;
 using brillo::ErrorPtr;
 using brillo::string_utils::ToString;
 using std::string;
+using std::vector;
 using update_engine::UpdateAttemptFlags;
 using update_engine::UpdateEngineStatus;
 
@@ -49,7 +50,11 @@ namespace chromeos_update_engine {
 namespace {
 // Log and set the error on the passed ErrorPtr.
 void LogAndSetError(ErrorPtr* error,
+#if BASE_VER < 576279
+                    const tracked_objects::Location& location,
+#else
                     const base::Location& location,
+#endif
                     const string& reason) {
   brillo::Error::AddTo(error,
                        location,
@@ -66,8 +71,7 @@ const char* const UpdateEngineService::kErrorFailed =
     "org.chromium.UpdateEngine.Error.Failed";
 
 UpdateEngineService::UpdateEngineService(SystemState* system_state)
-    : system_state_(system_state) {
-}
+    : system_state_(system_state) {}
 
 // org::chromium::UpdateEngineInterfaceInterface methods implementation.
 
@@ -100,6 +104,18 @@ bool UpdateEngineService::AttemptUpdate(ErrorPtr* /* error */,
 
   *out_result = system_state_->update_attempter()->CheckForUpdate(
       in_app_version, in_omaha_url, flags);
+  return true;
+}
+
+bool UpdateEngineService::AttemptInstall(brillo::ErrorPtr* error,
+                                         const string& omaha_url,
+                                         const vector<string>& dlc_module_ids) {
+  if (!system_state_->update_attempter()->CheckForInstall(dlc_module_ids,
+                                                          omaha_url)) {
+    // TODO(xiaochu): support more detailed error messages.
+    LogAndSetError(error, FROM_HERE, "Could not schedule install operation.");
+    return false;
+  }
   return true;
 }
 

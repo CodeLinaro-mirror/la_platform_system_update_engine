@@ -24,18 +24,15 @@
 // Streams used for gtest's PrintTo() functions.
 #include <iostream>  // NOLINT(readability/streams)
 #include <memory>
-#include <set>
 #include <string>
 #include <vector>
 
-#include <base/callback.h>
 #include <base/files/file_path.h>
 #include <base/files/scoped_temp_dir.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include "update_engine/common/action.h"
-#include "update_engine/common/subprocess.h"
 #include "update_engine/common/utils.h"
 #include "update_engine/update_metadata.pb.h"
 
@@ -76,22 +73,6 @@ inline int System(const std::string& cmd) {
   return system(cmd.c_str());
 }
 
-inline int Symlink(const std::string& oldpath, const std::string& newpath) {
-  return symlink(oldpath.c_str(), newpath.c_str());
-}
-
-inline int Chmod(const std::string& path, mode_t mode) {
-  return chmod(path.c_str(), mode);
-}
-
-inline int Mkdir(const std::string& path, mode_t mode) {
-  return mkdir(path.c_str(), mode);
-}
-
-inline int Chdir(const std::string& path) {
-  return chdir(path.c_str());
-}
-
 // Reads a symlink from disk. Returns empty string on failure.
 std::string Readlink(const std::string& path);
 
@@ -106,14 +87,14 @@ MATCHER_P(DownloadSourceMatcher, source_array, "") {
 class ScopedFilesystemUnmounter {
  public:
   explicit ScopedFilesystemUnmounter(const std::string& mountpoint)
-      : mountpoint_(mountpoint),
-        should_unmount_(true) {}
+      : mountpoint_(mountpoint), should_unmount_(true) {}
   ~ScopedFilesystemUnmounter() {
     if (should_unmount_) {
       utils::UnmountFilesystem(mountpoint_);
     }
   }
   void set_should_unmount(bool unmount) { should_unmount_ = unmount; }
+
  private:
   const std::string mountpoint_;
   bool should_unmount_;
@@ -144,7 +125,7 @@ class ScopedLoopbackDeviceBinder {
     ADD_FAILURE();
   }
 
-  const std::string &dev() {
+  const std::string& dev() const {
     EXPECT_TRUE(is_bound_);
     return dev_;
   }
@@ -202,10 +183,10 @@ std::string GetBuildArtifactsPath(const std::string& relative_path);
 
 class NoneType;
 
-template<typename T>
+template <typename T>
 class ObjectFeederAction;
 
-template<typename T>
+template <typename T>
 class ActionTraits<ObjectFeederAction<T>> {
  public:
   typedef T OutputObjectType;
@@ -214,7 +195,7 @@ class ActionTraits<ObjectFeederAction<T>> {
 
 // This is a simple Action class for testing. It feeds an object into
 // another action.
-template<typename T>
+template <typename T>
 class ObjectFeederAction : public Action<ObjectFeederAction<T>> {
  public:
   typedef NoneType InputObjectType;
@@ -229,17 +210,16 @@ class ObjectFeederAction : public Action<ObjectFeederAction<T>> {
   }
   static std::string StaticType() { return "ObjectFeederAction"; }
   std::string Type() const { return StaticType(); }
-  void set_obj(const T& out_obj) {
-    out_obj_ = out_obj;
-  }
+  void set_obj(const T& out_obj) { out_obj_ = out_obj; }
+
  private:
   T out_obj_;
 };
 
-template<typename T>
+template <typename T>
 class ObjectCollectorAction;
 
-template<typename T>
+template <typename T>
 class ActionTraits<ObjectCollectorAction<T>> {
  public:
   typedef NoneType OutputObjectType;
@@ -248,7 +228,7 @@ class ActionTraits<ObjectCollectorAction<T>> {
 
 // This is a simple Action class for testing. It receives an object from
 // another action.
-template<typename T>
+template <typename T>
 class ObjectCollectorAction : public Action<ObjectCollectorAction<T>> {
  public:
   typedef T InputObjectType;
@@ -264,6 +244,7 @@ class ObjectCollectorAction : public Action<ObjectCollectorAction<T>> {
   static std::string StaticType() { return "ObjectCollectorAction"; }
   std::string Type() const { return StaticType(); }
   const T& object() const { return object_; }
+
  private:
   T object_;
 };

@@ -40,9 +40,9 @@ using org::chromium::flimflam::ManagerProxyMock;
 using org::chromium::flimflam::ServiceProxyMock;
 using std::set;
 using std::string;
+using testing::_;
 using testing::Return;
 using testing::SetArgPointee;
-using testing::_;
 
 namespace chromeos_update_engine {
 
@@ -71,13 +71,14 @@ class ConnectionManagerTest : public ::testing::Test {
                        const char* physical_technology,
                        const char* service_tethering);
 
-  void TestWithServiceType(
-      const char* service_type,
-      const char* physical_technology,
-      ConnectionType expected_type);
-  void TestWithServiceTethering(
-      const char* service_tethering,
-      ConnectionTethering expected_tethering);
+  void TestWithServiceType(const char* service_type,
+                           const char* physical_technology,
+                           ConnectionType expected_type);
+
+  void TestWithServiceDisconnected(ConnectionType expected_type);
+
+  void TestWithServiceTethering(const char* service_tethering,
+                                ConnectionTethering expected_tethering);
 
   brillo::FakeMessageLoop loop_{nullptr};
   FakeSystemState fake_system_state_;
@@ -137,10 +138,9 @@ void ConnectionManagerTest::SetServiceReply(const string& service_path,
                                        std::move(service_proxy_mock));
 }
 
-void ConnectionManagerTest::TestWithServiceType(
-    const char* service_type,
-    const char* physical_technology,
-    ConnectionType expected_type) {
+void ConnectionManagerTest::TestWithServiceType(const char* service_type,
+                                                const char* physical_technology,
+                                                ConnectionType expected_type) {
   SetManagerReply("/service/guest/network", true);
   SetServiceReply("/service/guest/network",
                   service_type,
@@ -156,8 +156,7 @@ void ConnectionManagerTest::TestWithServiceType(
 }
 
 void ConnectionManagerTest::TestWithServiceTethering(
-    const char* service_tethering,
-    ConnectionTethering expected_tethering) {
+    const char* service_tethering, ConnectionTethering expected_tethering) {
   SetManagerReply("/service/guest/network", true);
   SetServiceReply(
       "/service/guest/network", shill::kTypeWifi, nullptr, service_tethering);
@@ -166,6 +165,18 @@ void ConnectionManagerTest::TestWithServiceTethering(
   ConnectionTethering tethering;
   EXPECT_TRUE(cmut_.GetConnectionProperties(&type, &tethering));
   EXPECT_EQ(expected_tethering, tethering);
+  testing::Mock::VerifyAndClearExpectations(
+      fake_shill_proxy_->GetManagerProxy());
+}
+
+void ConnectionManagerTest::TestWithServiceDisconnected(
+    ConnectionType expected_type) {
+  SetManagerReply("/", true);
+
+  ConnectionType type;
+  ConnectionTethering tethering;
+  EXPECT_TRUE(cmut_.GetConnectionProperties(&type, &tethering));
+  EXPECT_EQ(expected_type, type);
   testing::Mock::VerifyAndClearExpectations(
       fake_shill_proxy_->GetManagerProxy());
 }
@@ -201,6 +212,10 @@ TEST_F(ConnectionManagerTest, TetheringTest) {
 
 TEST_F(ConnectionManagerTest, UnknownTest) {
   TestWithServiceType("foo", nullptr, ConnectionType::kUnknown);
+}
+
+TEST_F(ConnectionManagerTest, DisconnectTest) {
+  TestWithServiceDisconnected(ConnectionType::kDisconnected);
 }
 
 TEST_F(ConnectionManagerTest, AllowUpdatesOverEthernetTest) {

@@ -39,16 +39,16 @@ using std::vector;
 
 namespace chromeos_update_engine {
 
-class UtilsTest : public ::testing::Test { };
+class UtilsTest : public ::testing::Test {};
 
 TEST(UtilsTest, CanParseECVersion) {
   // Should be able to parse and valid key value line.
   EXPECT_EQ("12345", utils::ParseECVersion("fw_version=12345"));
-  EXPECT_EQ("123456", utils::ParseECVersion(
-      "b=1231a fw_version=123456 a=fasd2"));
+  EXPECT_EQ("123456",
+            utils::ParseECVersion("b=1231a fw_version=123456 a=fasd2"));
   EXPECT_EQ("12345", utils::ParseECVersion("fw_version=12345"));
-  EXPECT_EQ("00VFA616", utils::ParseECVersion(
-      "vendor=\"sam\" fw_version=\"00VFA616\""));
+  EXPECT_EQ("00VFA616",
+            utils::ParseECVersion("vendor=\"sam\" fw_version=\"00VFA616\""));
 
   // For invalid entries, should return the empty string.
   EXPECT_EQ("", utils::ParseECVersion("b=1231a fw_version a=fasd2"));
@@ -172,21 +172,18 @@ TEST(UtilsTest, MakePartitionNameForMountTest) {
             utils::MakePartitionNameForMount("/dev/mmcblk0p2"));
   EXPECT_EQ("/dev/loop0", utils::MakePartitionNameForMount("/dev/loop0"));
   EXPECT_EQ("/dev/loop8", utils::MakePartitionNameForMount("/dev/loop8"));
-  EXPECT_EQ("/dev/loop12p2",
-            utils::MakePartitionNameForMount("/dev/loop12p2"));
+  EXPECT_EQ("/dev/loop12p2", utils::MakePartitionNameForMount("/dev/loop12p2"));
   EXPECT_EQ("/dev/ubiblock5_0",
             utils::MakePartitionNameForMount("/dev/ubiblock5_0"));
-  EXPECT_EQ("/dev/mtd4",
-            utils::MakePartitionNameForMount("/dev/ubi4_0"));
+  EXPECT_EQ("/dev/mtd4", utils::MakePartitionNameForMount("/dev/ubi4_0"));
   EXPECT_EQ("/dev/ubiblock3_0",
             utils::MakePartitionNameForMount("/dev/ubiblock3"));
   EXPECT_EQ("/dev/mtd2", utils::MakePartitionNameForMount("/dev/ubi2"));
-  EXPECT_EQ("/dev/ubi1_0",
-            utils::MakePartitionNameForMount("/dev/ubiblock1"));
+  EXPECT_EQ("/dev/ubi1_0", utils::MakePartitionNameForMount("/dev/ubiblock1"));
 }
 
 TEST(UtilsTest, FuzzIntTest) {
-  static const uint32_t kRanges[] = { 0, 1, 2, 20 };
+  static const uint32_t kRanges[] = {0, 1, 2, 20};
   for (uint32_t range : kRanges) {
     const int kValue = 50;
     for (int tries = 0; tries < 100; ++tries) {
@@ -252,18 +249,12 @@ TEST(UtilsTest, FormatTimeDeltaTest) {
   // which is not localized) so we only need to test the C locale
   EXPECT_EQ(utils::FormatTimeDelta(base::TimeDelta::FromMilliseconds(100)),
             "0.1s");
-  EXPECT_EQ(utils::FormatTimeDelta(base::TimeDelta::FromSeconds(0)),
-            "0s");
-  EXPECT_EQ(utils::FormatTimeDelta(base::TimeDelta::FromSeconds(1)),
-            "1s");
-  EXPECT_EQ(utils::FormatTimeDelta(base::TimeDelta::FromSeconds(59)),
-            "59s");
-  EXPECT_EQ(utils::FormatTimeDelta(base::TimeDelta::FromSeconds(60)),
-            "1m0s");
-  EXPECT_EQ(utils::FormatTimeDelta(base::TimeDelta::FromSeconds(61)),
-            "1m1s");
-  EXPECT_EQ(utils::FormatTimeDelta(base::TimeDelta::FromSeconds(90)),
-            "1m30s");
+  EXPECT_EQ(utils::FormatTimeDelta(base::TimeDelta::FromSeconds(0)), "0s");
+  EXPECT_EQ(utils::FormatTimeDelta(base::TimeDelta::FromSeconds(1)), "1s");
+  EXPECT_EQ(utils::FormatTimeDelta(base::TimeDelta::FromSeconds(59)), "59s");
+  EXPECT_EQ(utils::FormatTimeDelta(base::TimeDelta::FromSeconds(60)), "1m0s");
+  EXPECT_EQ(utils::FormatTimeDelta(base::TimeDelta::FromSeconds(61)), "1m1s");
+  EXPECT_EQ(utils::FormatTimeDelta(base::TimeDelta::FromSeconds(90)), "1m30s");
   EXPECT_EQ(utils::FormatTimeDelta(base::TimeDelta::FromSeconds(1205)),
             "20m5s");
   EXPECT_EQ(utils::FormatTimeDelta(base::TimeDelta::FromSeconds(3600)),
@@ -283,49 +274,7 @@ TEST(UtilsTest, FormatTimeDeltaTest) {
   EXPECT_EQ(utils::FormatTimeDelta(base::TimeDelta::FromSeconds(200000) +
                                    base::TimeDelta::FromMilliseconds(1)),
             "2d7h33m20.001s");
-  EXPECT_EQ(utils::FormatTimeDelta(base::TimeDelta::FromSeconds(-1)),
-            "-1s");
-}
-
-TEST(UtilsTest, TimeFromStructTimespecTest) {
-  struct timespec ts;
-
-  // Unix epoch (Thursday 00:00:00 UTC on Jan 1, 1970)
-  ts = (struct timespec) {.tv_sec = 0, .tv_nsec = 0};
-  EXPECT_EQ(base::Time::UnixEpoch(), utils::TimeFromStructTimespec(&ts));
-
-  // 42 ms after the Unix billennium (Sunday 01:46:40 UTC on September 9, 2001)
-  ts = (struct timespec) {.tv_sec = 1000 * 1000 * 1000,
-                          .tv_nsec = 42 * 1000 * 1000};
-  base::Time::Exploded exploded = (base::Time::Exploded) {
-    .year = 2001, .month = 9, .day_of_week = 0, .day_of_month = 9,
-    .hour = 1, .minute = 46, .second = 40, .millisecond = 42};
-  base::Time time;
-  EXPECT_TRUE(base::Time::FromUTCExploded(exploded, &time));
-  EXPECT_EQ(time, utils::TimeFromStructTimespec(&ts));
-}
-
-TEST(UtilsTest, DecodeAndStoreBase64String) {
-  base::FilePath path;
-
-  // Ensure we return false on empty strings or invalid base64.
-  EXPECT_FALSE(utils::DecodeAndStoreBase64String("", &path));
-  EXPECT_FALSE(utils::DecodeAndStoreBase64String("not valid base64", &path));
-
-  // Pass known base64 and check that it matches. This string was generated
-  // the following way:
-  //
-  //   $ echo "Update Engine" | base64
-  //   VXBkYXRlIEVuZ2luZQo=
-  EXPECT_TRUE(utils::DecodeAndStoreBase64String("VXBkYXRlIEVuZ2luZQo=",
-                                                &path));
-  ScopedPathUnlinker unlinker(path.value());
-  string expected_contents = "Update Engine\n";
-  string contents;
-  EXPECT_TRUE(utils::ReadFile(path.value(), &contents));
-  EXPECT_EQ(contents, expected_contents);
-  EXPECT_EQ(static_cast<off_t>(expected_contents.size()),
-            utils::FileSize(path.value()));
+  EXPECT_EQ(utils::FormatTimeDelta(base::TimeDelta::FromSeconds(-1)), "-1s");
 }
 
 TEST(UtilsTest, ConvertToOmahaInstallDate) {
@@ -346,29 +295,29 @@ TEST(UtilsTest, ConvertToOmahaInstallDate) {
   EXPECT_FALSE(utils::ConvertToOmahaInstallDate(
       base::Time::FromTimeT(omaha_epoch - 1), &value));
   EXPECT_FALSE(utils::ConvertToOmahaInstallDate(
-      base::Time::FromTimeT(omaha_epoch - 100*24*3600), &value));
+      base::Time::FromTimeT(omaha_epoch - 100 * 24 * 3600), &value));
 
   // Check that we jump from 0 to 7 exactly on the one-week mark, e.g.
   // on Jan 8, 2007 0:00 PST.
   EXPECT_TRUE(utils::ConvertToOmahaInstallDate(
-      base::Time::FromTimeT(omaha_epoch + 7*24*3600 - 1), &value));
+      base::Time::FromTimeT(omaha_epoch + 7 * 24 * 3600 - 1), &value));
   EXPECT_EQ(value, 0);
   EXPECT_TRUE(utils::ConvertToOmahaInstallDate(
-      base::Time::FromTimeT(omaha_epoch + 7*24*3600), &value));
+      base::Time::FromTimeT(omaha_epoch + 7 * 24 * 3600), &value));
   EXPECT_EQ(value, 7);
 
   // Check a couple of more values.
   EXPECT_TRUE(utils::ConvertToOmahaInstallDate(
-      base::Time::FromTimeT(omaha_epoch + 10*24*3600), &value));
+      base::Time::FromTimeT(omaha_epoch + 10 * 24 * 3600), &value));
   EXPECT_EQ(value, 7);
   EXPECT_TRUE(utils::ConvertToOmahaInstallDate(
-      base::Time::FromTimeT(omaha_epoch + 20*24*3600), &value));
+      base::Time::FromTimeT(omaha_epoch + 20 * 24 * 3600), &value));
   EXPECT_EQ(value, 14);
   EXPECT_TRUE(utils::ConvertToOmahaInstallDate(
-      base::Time::FromTimeT(omaha_epoch + 26*24*3600), &value));
+      base::Time::FromTimeT(omaha_epoch + 26 * 24 * 3600), &value));
   EXPECT_EQ(value, 21);
   EXPECT_TRUE(utils::ConvertToOmahaInstallDate(
-      base::Time::FromTimeT(omaha_epoch + 29*24*3600), &value));
+      base::Time::FromTimeT(omaha_epoch + 29 * 24 * 3600), &value));
   EXPECT_EQ(value, 28);
 
   // The date Jun 4, 2007 0:00 PDT is a Monday and is hence a point

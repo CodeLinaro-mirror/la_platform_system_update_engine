@@ -69,7 +69,8 @@ class UpdateAttempter : public ActionProcessorDelegate,
   void Init();
 
   // Initiates scheduling of update checks.
-  virtual void ScheduleUpdates();
+  // Returns true if update check is scheduled.
+  virtual bool ScheduleUpdates();
 
   // Checks for update and, if a newer version is available, attempts to update
   // the system. Non-empty |in_app_version| or |in_update_url| prevents
@@ -135,6 +136,10 @@ class UpdateAttempter : public ActionProcessorDelegate,
                               const std::string& omaha_url,
                               UpdateAttemptFlags flags);
 
+  // This is the version of CheckForUpdate called by AttemptInstall API.
+  virtual bool CheckForInstall(const std::vector<std::string>& dlc_module_ids,
+                               const std::string& omaha_url);
+
   // This is the internal entry point for going through a rollback. This will
   // attempt to run the postinstall on the non-active partition and set it as
   // the partition to boot from. If |powerwash| is True, perform a powerwash
@@ -181,7 +186,7 @@ class UpdateAttempter : public ActionProcessorDelegate,
   // Stores in |out_boot_time| the boottime (CLOCK_BOOTTIME) recorded at the
   // time of the last successful update in the current boot. Returns false if
   // there wasn't a successful update in the current boot.
-  virtual bool GetBootTimeAtUpdate(base::Time *out_boot_time);
+  virtual bool GetBootTimeAtUpdate(base::Time* out_boot_time);
 
   // Returns a version OS version that was being used before the last reboot,
   // and if that reboot happened to be into an update (current version).
@@ -241,14 +246,17 @@ class UpdateAttempter : public ActionProcessorDelegate,
   FRIEND_TEST(UpdateAttempterTest, BootTimeInUpdateMarkerFile);
   FRIEND_TEST(UpdateAttempterTest, BroadcastCompleteDownloadTest);
   FRIEND_TEST(UpdateAttempterTest, ChangeToDownloadingOnReceivedBytesTest);
+  FRIEND_TEST(UpdateAttempterTest, CheckForUpdateAUDlcTest);
   FRIEND_TEST(UpdateAttempterTest, CreatePendingErrorEventTest);
   FRIEND_TEST(UpdateAttempterTest, CreatePendingErrorEventResumedTest);
   FRIEND_TEST(UpdateAttempterTest, DisableDeltaUpdateIfNeededTest);
   FRIEND_TEST(UpdateAttempterTest, DownloadProgressAccumulationTest);
+  FRIEND_TEST(UpdateAttempterTest, InstallSetsStatusIdle);
   FRIEND_TEST(UpdateAttempterTest, MarkDeltaUpdateFailureTest);
   FRIEND_TEST(UpdateAttempterTest, PingOmahaTest);
   FRIEND_TEST(UpdateAttempterTest, ReportDailyMetrics);
   FRIEND_TEST(UpdateAttempterTest, RollbackNotAllowed);
+  FRIEND_TEST(UpdateAttempterTest, RollbackAfterInstall);
   FRIEND_TEST(UpdateAttempterTest, RollbackAllowed);
   FRIEND_TEST(UpdateAttempterTest, RollbackAllowedSetAndReset);
   FRIEND_TEST(UpdateAttempterTest, RollbackMetricsNotRollbackFailure);
@@ -260,6 +268,7 @@ class UpdateAttempter : public ActionProcessorDelegate,
   FRIEND_TEST(UpdateAttempterTest, SetRollbackHappenedNotRollback);
   FRIEND_TEST(UpdateAttempterTest, SetRollbackHappenedRollback);
   FRIEND_TEST(UpdateAttempterTest, TargetVersionPrefixSetAndReset);
+  FRIEND_TEST(UpdateAttempterTest, UpdateAfterInstall);
   FRIEND_TEST(UpdateAttempterTest, UpdateAttemptFlagsCachedAtUpdateStart);
   FRIEND_TEST(UpdateAttempterTest, UpdateDeferredByPolicyTest);
   FRIEND_TEST(UpdateAttempterTest, UpdateIsNotRunningWhenUpdateAvailable);
@@ -394,10 +403,21 @@ class UpdateAttempter : public ActionProcessorDelegate,
 
   void CalculateStagingParams(bool interactive);
 
+  // Reports a metric that tracks the time from when the update was first seen
+  // to the time when the update was finally downloaded and applied. This metric
+  // will only be reported for enterprise enrolled devices.
+  void ReportTimeToUpdateAppliedMetric();
+
   // Last status notification timestamp used for throttling. Use monotonic
   // TimeTicks to ensure that notifications are sent even if the system clock is
   // set back in the middle of an update.
   base::TimeTicks last_notify_time_;
+
+  // Our two proxy resolvers
+  DirectProxyResolver direct_proxy_resolver_;
+#if USE_CHROME_NETWORK_PROXY
+  ChromeBrowserProxyResolver chrome_proxy_resolver_;
+#endif  // USE_CHROME_NETWORK_PROXY
 
   std::unique_ptr<ActionProcessor> processor_;
 
@@ -458,12 +478,6 @@ class UpdateAttempter : public ActionProcessorDelegate,
   // If true, this update cycle we are obeying proxies
   bool obeying_proxies_ = true;
 
-  // Our two proxy resolvers
-  DirectProxyResolver direct_proxy_resolver_;
-#if USE_CHROME_NETWORK_PROXY
-  ChromeBrowserProxyResolver chrome_proxy_resolver_;
-#endif  // USE_CHROME_NETWORK_PROXY
-
   // Used for fetching information about the device policy.
   std::unique_ptr<policy::PolicyProvider> policy_provider_;
 
@@ -494,12 +508,25 @@ class UpdateAttempter : public ActionProcessorDelegate,
   std::string forced_app_version_;
   std::string forced_omaha_url_;
 
+  // A list of DLC module IDs.
+  std::vector<std::string> dlc_module_ids_;
+  // Whether the operation is install (write to the current slot not the
+  // inactive slot).
+  bool is_install_;
+
   // If this is not TimeDelta(), then that means staging is turned on.
   base::TimeDelta staging_wait_time_;
   chromeos_update_manager::StagingSchedule staging_schedule_;
 
   DISALLOW_COPY_AND_ASSIGN(UpdateAttempter);
 };
+
+// Turns a generic ErrorCode::kError to a generic error code specific
+// to |action| (e.g., ErrorCode::kFilesystemVerifierError). If |code| is
+// not ErrorCode::kError, or the action is not matched, returns |code|
+// unchanged.
+
+ErrorCode GetErrorCodeForAction(AbstractAction* action, ErrorCode code);
 
 }  // namespace chromeos_update_engine
 

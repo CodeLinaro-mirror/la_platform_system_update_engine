@@ -80,14 +80,10 @@ class OmahaResponseHandlerActionTest : public ::testing::Test {
  protected:
   void SetUp() override {
     FakeBootControl* fake_boot_control = fake_system_state_.fake_boot_control();
-    fake_boot_control->SetPartitionDevice(
-        kPartitionNameKernel, 0, "/dev/sdz2");
-    fake_boot_control->SetPartitionDevice(
-        kPartitionNameRoot, 0, "/dev/sdz3");
-    fake_boot_control->SetPartitionDevice(
-        kPartitionNameKernel, 1, "/dev/sdz4");
-    fake_boot_control->SetPartitionDevice(
-        kPartitionNameRoot, 1, "/dev/sdz5");
+    fake_boot_control->SetPartitionDevice(kPartitionNameKernel, 0, "/dev/sdz2");
+    fake_boot_control->SetPartitionDevice(kPartitionNameRoot, 0, "/dev/sdz3");
+    fake_boot_control->SetPartitionDevice(kPartitionNameKernel, 1, "/dev/sdz4");
+    fake_boot_control->SetPartitionDevice(kPartitionNameRoot, 1, "/dev/sdz5");
   }
 
   // Return true iff the OmahaResponseHandlerAction succeeded.
@@ -140,7 +136,10 @@ bool OmahaResponseHandlerActionTest::DoTest(const OmahaResponse& in,
                 SetString(kPrefsUpdateCheckResponseHash, expected_hash))
         .WillOnce(Return(true));
 
-    int slot = 1 - fake_system_state_.fake_boot_control()->GetCurrentSlot();
+    int slot =
+        fake_system_state_.request_params()->is_install()
+            ? fake_system_state_.fake_boot_control()->GetCurrentSlot()
+            : 1 - fake_system_state_.fake_boot_control()->GetCurrentSlot();
     string key = kPrefsChannelOnSlotPrefix + std::to_string(slot);
     EXPECT_CALL(*(fake_system_state_.mock_prefs()), SetString(key, testing::_))
         .WillOnce(Return(true));
@@ -282,6 +281,25 @@ TEST_F(OmahaResponseHandlerActionTest, NoUpdatesTest) {
   InstallPlan install_plan;
   EXPECT_FALSE(DoTest(in, "", &install_plan));
   EXPECT_TRUE(install_plan.partitions.empty());
+}
+
+TEST_F(OmahaResponseHandlerActionTest, InstallTest) {
+  OmahaResponse in;
+  in.update_exists = true;
+  in.version = "a.b.c.d";
+  in.packages.push_back(
+      {.payload_urls = {kLongName}, .size = 1, .hash = kPayloadHashHex});
+  in.packages.push_back(
+      {.payload_urls = {kLongName}, .size = 2, .hash = kPayloadHashHex});
+  in.more_info_url = "http://more/info";
+
+  OmahaRequestParams params(&fake_system_state_);
+  params.set_is_install(true);
+
+  fake_system_state_.set_request_params(&params);
+  InstallPlan install_plan;
+  EXPECT_TRUE(DoTest(in, "", &install_plan));
+  EXPECT_EQ(install_plan.source_slot, UINT_MAX);
 }
 
 TEST_F(OmahaResponseHandlerActionTest, MultiPackageTest) {
