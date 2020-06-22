@@ -30,6 +30,7 @@
 #include "update_engine/common/utils.h"
 #include "update_engine/payload_consumer/delta_performer.h"
 
+using android::base::GetBoolProperty;
 using android::snapshot::SnapshotManager;
 using android::snapshot::SnapshotMergeStats;
 using android::snapshot::UpdateState;
@@ -160,7 +161,10 @@ void CleanupPreviousUpdateAction::CheckSlotMarkedSuccessfulOrSchedule() {
 
   if (metadata_device_ == nullptr) {
     LOG(ERROR) << "Failed to mount /metadata.";
-    processor_->ActionComplete(this, ErrorCode::kError);
+    // If metadata is erased but not formatted, it is possible to not mount
+    // it in recovery. It is safe to skip CleanupPreviousUpdateAction.
+    processor_->ActionComplete(
+        this, kIsRecovery ? ErrorCode::kSuccess : ErrorCode::kError);
     return;
   }
 
@@ -332,8 +336,16 @@ bool CleanupPreviousUpdateAction::BeforeCancel() {
 void CleanupPreviousUpdateAction::InitiateMergeAndWait() {
   TEST_AND_RETURN(running_);
   LOG(INFO) << "Attempting to initiate merge.";
+  // suspend the VAB merge when running a DSU
+  if (GetBoolProperty("ro.gsid.image_running", false)) {
+    LOG(WARNING) << "Suspend the VAB merge when running a DSU.";
+    processor_->ActionComplete(this, ErrorCode::kError);
+    return;
+  }
 
-  if (snapshot_->InitiateMerge()) {
+  uint64_t cow_file_size;
+  if (snapshot_->InitiateMerge(&cow_file_size)) {
+    merge_stats_->set_cow_file_size(cow_file_size);
     WaitForMergeOrSchedule();
     return;
   }
@@ -389,14 +401,22 @@ void CleanupPreviousUpdateAction::ReportMergeStats() {
 
   auto passed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
       result->merge_time());
+
+  bool vab_retrofit = boot_control_->GetDynamicPartitionControl()
+                          ->GetVirtualAbFeatureFlag()
+                          .IsRetrofit();
+
   LOG(INFO) << "Reporting merge stats: "
             << android::snapshot::UpdateState_Name(report.state()) << " in "
             << passed_ms.count() << "ms (resumed " << report.resume_count()
-            << " times)";
+            << " times), using " << report.cow_file_size()
+            << " bytes of COW image.";
   android::util::stats_write(android::util::SNAPSHOT_MERGE_REPORTED,
                              static_cast<int32_t>(report.state()),
                              static_cast<int64_t>(passed_ms.count()),
-                             static_cast<int32_t>(report.resume_count()));
+                             static_cast<int32_t>(report.resume_count()),
+                             vab_retrofit,
+                             static_cast<int64_t>(report.cow_file_size()));
 #endif
 }
 
