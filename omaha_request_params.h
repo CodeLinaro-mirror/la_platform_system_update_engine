@@ -23,8 +23,9 @@
 
 #include <base/macros.h>
 #include <base/time/time.h>
+#ifndef USE_LE_MODE
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
-
+#endif
 #include "update_engine/common/platform_constants.h"
 #include "update_engine/image_properties.h"
 
@@ -247,11 +248,12 @@ class OmahaRequestParams {
   }
 
  private:
+#ifndef USE_LE_MODE
   FRIEND_TEST(OmahaRequestParamsTest, IsValidChannelTest);
   FRIEND_TEST(OmahaRequestParamsTest, ChannelIndexTest);
   FRIEND_TEST(OmahaRequestParamsTest, ToMoreStableChannelFlagTest);
   FRIEND_TEST(OmahaRequestParamsTest, CollectECFWVersionsTest);
-
+#endif
   // Returns true if |channel| is a valid channel, false otherwise.
   bool IsValidChannel(const std::string& channel) const;
 

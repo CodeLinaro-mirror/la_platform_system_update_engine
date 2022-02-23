@@ -25,7 +25,9 @@
 #include <utils/Errors.h>
 #include <utils/String16.h>
 #include <utils/StrongPointer.h>
-
+#ifdef USE_LE_MODE
+#include <algorithm>
+#endif
 #include "android/os/BnUpdateEngine.h"
 #include "android/os/IUpdateEngineCallback.h"
 #include "update_engine/service_delegate_android_interface.h"

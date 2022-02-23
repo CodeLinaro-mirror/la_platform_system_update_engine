@@ -25,8 +25,9 @@
 #include <base/time/time.h>
 #include <brillo/secure_blob.h>
 #include <google/protobuf/repeated_field.h>
+#ifndef USE_LE_MODE
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
-
+#endif
 #include "update_engine/common/hash_calculator.h"
 #include "update_engine/common/platform_constants.h"
 #include "update_engine/payload_consumer/file_descriptor.h"
@@ -193,10 +194,11 @@ class DeltaPerformer : public FileWriter {
  private:
   friend class DeltaPerformerTest;
   friend class DeltaPerformerIntegrationTest;
+#ifndef USE_LE_MODE
   FRIEND_TEST(DeltaPerformerTest, BrilloMetadataSignatureSizeTest);
   FRIEND_TEST(DeltaPerformerTest, BrilloVerifyMetadataSignatureTest);
   FRIEND_TEST(DeltaPerformerTest, UsePublicKeyFromResponse);
-
+#endif
   // Parse and move the update instructions of all partitions into our local
   // |partitions_| variable based on the version of the payload. Requires the
   // manifest to be parsed and valid.

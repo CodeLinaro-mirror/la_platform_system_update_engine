@@ -13,6 +13,40 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
+// Changes from Qualcomm Innovation Center are provided under the following license:
+//
+// Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted (subject to the limitations in the
+// disclaimer below) provided that the following conditions are met:
+//
+//    * Redistributions of source code must retain the above copyright
+//      notice, this list of conditions and the following disclaimer.
+//
+//    * Redistributions in binary form must reproduce the above
+//      copyright notice, this list of conditions and the following
+//      disclaimer in the documentation and/or other materials provided
+//      with the distribution.
+//
+//    * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
+//      contributors may be used to endorse or promote products derived
+//      from this software without specific prior written permission.
+//
+// NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
+// GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
+// HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
+// WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+// MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+// IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+// ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+// DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+// GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+// IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+// OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+// IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+//
 
 #include "update_engine/boot_control_recovery.h"
 
@@ -25,7 +59,14 @@
 
 #include "update_engine/common/utils.h"
 #include "update_engine/utils_android.h"
-
+#ifdef USE_LE_MODE
+#include <mtdutils/mounts.h>
+#include <mtdutils/mtdutils.h>
+#include "libabctl.h"
+#define BOOT_NAME_LENGTH 7
+#define ROOTFS_NAME_LENGTH 10
+#define MAX_SLOTS (2)
+#endif
 using std::string;
 
 #ifndef _UE_SIDELOAD
@@ -36,13 +77,20 @@ using std::string;
 // the right boot_control HAL, instead we use the only HAL statically linked in
 // via the PRODUCT_STATIC_BOOT_CONTROL_HAL make variable and access the module
 // struct directly.
+#ifndef USE_LE_MODE
 extern const hw_module_t HAL_MODULE_INFO_SYM;
+#endif
 
 namespace chromeos_update_engine {
 
 namespace boot_control {
-
+#ifdef USE_LE_MODE
+  static int MAX_NUM_SLOTS = 2;
+  int boot_slot, inactive_slot;
+  const char* slot_suffix_arr[] = {"_a", "_b", NULL};
+#endif
 // Factory defined in boot_control.h.
+#ifdef USE_LE_MODE
 std::unique_ptr<BootControlInterface> CreateBootControl() {
   std::unique_ptr<BootControlRecovery> boot_control(new BootControlRecovery());
   if (!boot_control->Init()) {
@@ -50,10 +98,12 @@ std::unique_ptr<BootControlInterface> CreateBootControl() {
   }
   return std::move(boot_control);
 }
+#endif
 
 }  // namespace boot_control
 
 bool BootControlRecovery::Init() {
+#ifndef USE_LE_MODE
   const hw_module_t* hw_module;
   int ret;
 
@@ -79,15 +129,37 @@ bool BootControlRecovery::Init() {
             << "version " << (hw_module->module_api_version >> 8) << "."
             << (hw_module->module_api_version & 0xff) << " "
             << "authored by '" << hw_module->author << "'.";
+#endif
+  LOG(INFO) << " enable bootcontrol TBD ";
   return true;
 }
 
 unsigned int BootControlRecovery::GetNumSlots() const {
+#ifndef USE_LE_MODE
   return module_->getNumberSlots(module_);
+#else
+  LOG(INFO) << " GetNumSlots ";
+  return MAX_SLOTS;
+#endif
 }
 
 BootControlInterface::Slot BootControlRecovery::GetCurrentSlot() const {
+#ifndef USE_LE_MODE
   return module_->getCurrentSlot(module_);
+#else
+  int current_slot = libabctl_getBootSlot();
+  if(current_slot == 0){
+    LOG(INFO) << " current MTD slto is _a";  
+    return 0;
+  }
+  else if(current_slot == 1){
+    LOG(INFO) << " current MTD slto is _b";  
+    return 1;
+  }else{
+    LOG(INFO) << " device doesnt support DUAL PARTITION";
+    return -1;
+  }
+#endif
 }
 
 bool BootControlRecovery::GetPartitionDevice(const string& partition_name,
@@ -112,6 +184,7 @@ bool BootControlRecovery::GetPartitionDevice(const string& partition_name,
   // of misc and then finding an entry in /dev matching the sysfs
   // entry.
 
+#ifndef USE_LE_MODE
   base::FilePath misc_device;
   if (!utils::DeviceForMountPoint("/misc", &misc_device))
     return false;
@@ -122,7 +195,12 @@ bool BootControlRecovery::GetPartitionDevice(const string& partition_name,
     return false;
   }
 
+#ifndef USE_LE_MODE
   const char* suffix = module_->getSuffix(module_, slot);
+  LOG(INFO) << "boot_control current slot suffix  " << suffix;
+#else
+  const char* suffix = "_b";//module_->getSuffix(module_, slot);
+#endif
   if (suffix == nullptr) {
     LOG(ERROR) << "boot_control impl returned no suffix for slot "
                << SlotName(slot);
@@ -136,20 +214,74 @@ bool BootControlRecovery::GetPartitionDevice(const string& partition_name,
   }
 
   *device = path.value();
+#endif
+  LOG(INFO) << "boot_control slot partition_name: " << partition_name;
+  chromeos_update_engine::boot_control::boot_slot = libabctl_getBootSlot();
+  if (chromeos_update_engine::boot_control::boot_slot == -1) {
+      printf(" libabctl error aborting!\n");
+     return false;
+  }
+  LOG(INFO) << "boot_control current active slot  " << chromeos_update_engine::boot_control::boot_slot;
+  // Set the inactive slot to the non-boot slot (1->0, 0->1)
+  chromeos_update_engine::boot_control::inactive_slot = (chromeos_update_engine::boot_control::boot_slot + 1)%2;
+  //chromeos_update_engine::boot_control::inactive_slot = chromeos_update_engine::boot_control::boot_slot;
+  LOG(INFO) << "boot_control current inactive slot  " << chromeos_update_engine::boot_control::inactive_slot;
+  printf("boot_slot = %s, inactive_slot = %s\n", chromeos_update_engine::boot_control::slot_suffix_arr[chromeos_update_engine::boot_control::boot_slot],
+          chromeos_update_engine::boot_control::slot_suffix_arr[chromeos_update_engine::boot_control::inactive_slot]);
+  char *inactive_mtd_block;
+  if(partition_name == "system"){
+  char inactive_rootfs_volume[ROOTFS_NAME_LENGTH];
+  //snprintf(inactive_rootfs_volume, ROOTFS_NAME_LENGTH, "%s%s", "rootfs",
+  //    chromeos_update_engine::boot_control::slot_suffix_arr[chromeos_update_engine::boot_control::inactive_slot]);
+  snprintf(inactive_rootfs_volume, ROOTFS_NAME_LENGTH, "%s%s", "system",
+      chromeos_update_engine::boot_control::slot_suffix_arr[chromeos_update_engine::boot_control::inactive_slot]);
+  inactive_mtd_block = BootControlRecovery::getMtdBlock(inactive_rootfs_volume);
+  printf("\n boot_control inactive_rootfs_volume  %s\n",inactive_rootfs_volume);
+  } else if(partition_name == "boot"){
+    char inactive_boot_partition[BOOT_NAME_LENGTH];
+    snprintf(inactive_boot_partition, BOOT_NAME_LENGTH, "%s%s", "boot",
+      chromeos_update_engine::boot_control::slot_suffix_arr[chromeos_update_engine::boot_control::inactive_slot]);
+    inactive_mtd_block = getMtdBlock(inactive_boot_partition);
+  }
+  printf("\n boot_control %s\n",inactive_mtd_block);
+  LOG(INFO) << "boot_control inactive_mtd_block: " << inactive_mtd_block;
+  std::string str;
+  str.assign(inactive_mtd_block);
+  LOG(INFO) << "boot_control inactive_mtd_block: " << str;
+  *device = str;
   return true;
 }
 
+char* BootControlRecovery::getMtdBlock(char* rootfs_volume) const {
+    int err = mtd_scan_partitions();
+    if (err == -1){
+        printf("mtd scan partition failed\n");
+        return strdup("");
+    }
+    const MtdPartition* mtd = mtd_find_partition_by_name(rootfs_volume);
+    if (mtd == NULL) {
+        printf("no mtd partition named \"%s\"\n", rootfs_volume);
+        return strdup("");
+    }
+    char mtd_devname[PATH_MAX];
+    snprintf(mtd_devname, sizeof(mtd_devname), "/dev/mtdblock%d", mtd->device_index);
+    return strdup(mtd_devname);
+}
+
 bool BootControlRecovery::IsSlotBootable(Slot slot) const {
+#ifndef USE_LE_MODE
   int ret = module_->isSlotBootable(module_, slot);
   if (ret < 0) {
     LOG(ERROR) << "Unable to determine if slot " << SlotName(slot)
                << " is bootable: " << strerror(-ret);
     return false;
   }
-  return ret == 1;
+#endif
+  return true;
 }
 
 bool BootControlRecovery::MarkSlotUnbootable(Slot slot) {
+#ifndef USE_LE_MODE
   int ret = module_->setSlotAsUnbootable(module_, slot);
   if (ret < 0) {
     LOG(ERROR) << "Unable to mark slot " << SlotName(slot)
@@ -157,19 +289,41 @@ bool BootControlRecovery::MarkSlotUnbootable(Slot slot) {
     return false;
   }
   return ret == 0;
+#else
+  LOG(INFO) << "MarkSlotUnbootable  " << SlotName(slot);
+  int ret = libabctl_setUnbootable(slot);
+  if(ret == 0) {
+    return true;
+  } else {
+    return false;
+  }
+#endif
 }
 
 bool BootControlRecovery::SetActiveBootSlot(Slot slot) {
+#ifndef USE_LE_MODE
   int ret = module_->setActiveBootSlot(module_, slot);
   if (ret < 0) {
     LOG(ERROR) << "Unable to set the active slot to slot " << SlotName(slot)
                << ": " << strerror(-ret);
   }
   return ret == 0;
+#else
+  LOG(INFO) << "SetActiveBootSlot   " << SlotName(slot);
+  int ret = libabctl_setActive(slot);
+  if(ret == 0) {
+    LOG(INFO) << "SetActiveBootSlot  " << SlotName(slot) << " is success";
+    return true;
+  } else {
+    LOG(INFO) << "SetActiveBootSlot  " << SlotName(slot) << " failed";
+    return false;
+  }	
+#endif
 }
 
 bool BootControlRecovery::MarkBootSuccessfulAsync(
     base::Callback<void(bool)> callback) {
+#ifndef USE_LE_MODE
   int ret = module_->markBootSuccessful(module_);
   if (ret < 0) {
     LOG(ERROR) << "Unable to mark boot successful: " << strerror(-ret);
@@ -177,6 +331,15 @@ bool BootControlRecovery::MarkBootSuccessfulAsync(
   return brillo::MessageLoop::current()->PostTask(
              FROM_HERE, base::Bind(callback, ret == 0)) !=
          brillo::MessageLoop::kTaskIdNull;
+#else
+  LOG(INFO) << "MarkBootSuccessfulAsync   ";
+  int ret = libabctl_SetBootSuccess();
+  if (ret != 0) {	  
+    LOG(ERROR) << "Unable to call MarkBootSuccessful: ";
+    return false;
+  }
+  return true;
+#endif
 }
 
 }  // namespace chromeos_update_engine

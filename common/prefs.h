@@ -23,7 +23,9 @@
 
 #include <base/files/file_path.h>
 
+#ifndef USE_LE_MODE
 #include "gtest/gtest_prod.h"  // for FRIEND_TEST
+#endif
 #include "update_engine/common/prefs_interface.h"
 
 namespace chromeos_update_engine {
@@ -99,10 +101,11 @@ class Prefs : public PrefsBase {
   bool Init(const base::FilePath& prefs_dir);
 
  private:
+#ifndef USE_LE_MODE
   FRIEND_TEST(PrefsTest, GetFileNameForKey);
   FRIEND_TEST(PrefsTest, GetFileNameForKeyBadCharacter);
   FRIEND_TEST(PrefsTest, GetFileNameForKeyEmpty);
-
+#endif
   class FileStorage : public PrefsBase::StorageInterface {
    public:
     FileStorage() = default;
@@ -116,10 +119,11 @@ class Prefs : public PrefsBase {
     bool DeleteKey(const std::string& key) override;
 
    private:
+#ifndef USE_LE_MODE
     FRIEND_TEST(PrefsTest, GetFileNameForKey);
     FRIEND_TEST(PrefsTest, GetFileNameForKeyBadCharacter);
     FRIEND_TEST(PrefsTest, GetFileNameForKeyEmpty);
-
+#endif
     // Sets |filename| to the full path to the file containing the data
     // associated with |key|. Returns true on success, false otherwise.
     bool GetFileNameForKey(const std::string& key,

@@ -13,6 +13,40 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
+// Changes from Qualcomm Innovation Center are provided under the following license:
+//
+// Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted (subject to the limitations in the
+// disclaimer below) provided that the following conditions are met:
+//
+//    * Redistributions of source code must retain the above copyright
+//      notice, this list of conditions and the following disclaimer.
+//
+//    * Redistributions in binary form must reproduce the above
+//      copyright notice, this list of conditions and the following
+//      disclaimer in the documentation and/or other materials provided
+//      with the distribution.
+//
+//    * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
+//      contributors may be used to endorse or promote products derived
+//      from this software without specific prior written permission.
+//
+// NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
+// GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
+// HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
+// WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+// MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+// IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+// ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+// DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+// GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+// IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+// OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+// IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+//
 
 #include <xz.h>
 
@@ -27,6 +61,19 @@
 #include <brillo/flag_helper.h>
 #include <brillo/make_unique_ptr.h>
 #include <brillo/message_loops/base_message_loop.h>
+#ifdef USE_LE_MODE
+#include <brillo/message_loops/fake_message_loop.h>
+#include <brillo/message_loops/message_loop.h>
+
+#include <base/message_loop/message_loop.h>
+#include <stdlib.h>
+#include <utils/RefBase.h>
+#include <utils/Log.h>
+#include <base/run_loop.h>
+#include <base/threading/thread.h>
+#include "update_engine/apply_payload.h"
+#endif
+
 #include <brillo/streams/file_stream.h>
 #include <brillo/streams/stream.h>
 
@@ -38,10 +85,20 @@
 #include "update_engine/common/terminator.h"
 #include "update_engine/common/utils.h"
 #include "update_engine/update_attempter_android.h"
+#include "update_engine/update_engine_service.h"
+
+#ifdef USE_GLIB
+#include <glib.h>
+#endif
 
 using std::string;
 using std::vector;
 using update_engine::UpdateStatus;
+
+#ifdef USE_LE_MODE
+using namespace android;
+#endif
+
 
 namespace {
 // The root directory used for temporary files in update_engine_sideload.
@@ -49,7 +106,6 @@ const char kSideloadRootTempDir[] = "/tmp/update_engine_sideload";
 }  // namespace
 
 namespace chromeos_update_engine {
-namespace {
 
 void SetupLogging() {
   string log_file;
@@ -62,6 +118,7 @@ void SetupLogging() {
   logging::InitLogging(log_settings);
 }
 
+#ifdef USE_LE_MODE
 class SideloadDaemonState : public DaemonStateInterface,
                             public ServiceObserverInterface {
  public:
@@ -135,14 +192,33 @@ class SideloadDaemonState : public DaemonStateInterface,
   ErrorCode error_code_{ErrorCode::kSuccess};
   double progress_{-1.};
 };
+#endif
+
+void SlotSwitch(){
+  LOG(INFO) << " test cb from updat_engine_service";
+}
+
+
+chromeos_update_engine::ApplyPayload::ApplyPayload() { LOG(INFO) << " ApplyPayload()"; }
+chromeos_update_engine::ApplyPayload::~ApplyPayload() { LOG(INFO) <<" ~ApplyPayload()"; }
 
 // Apply an update payload directly from the given payload URI.
-bool ApplyUpdatePayload(const string& payload,
+bool chromeos_update_engine::ApplyPayload::ApplyUpdatePayload(const string& payload,
                         int64_t payload_offset,
                         int64_t payload_size,
                         const vector<string>& headers,
                         int64_t status_fd) {
-  brillo::BaseMessageLoop loop;
+  printf("\n  Update Engine Service , payload %s \n", payload.c_str());
+  printf("\n Update Engine Service , payloadoffset %ld \n",payload_offset);
+  printf("\n Update Engine Service , payload size %ld \n",payload_size);
+  printf("\n Update Engine Service , status_fd  %ld \n",status_fd);
+
+  LOG(INFO) << "ApplyUpdatePayload  Engine Sideloading set path :";
+  LOG(INFO) << "ApplyUpdatePayload  0 ";
+
+#ifdef USE_LE_MODE
+//  brillo::BaseMessageLoop loop;
+  brillo::FakeMessageLoop loop(nullptr);
   loop.SetAsCurrent();
 
   // Setup the subprocess handler.
@@ -164,15 +240,20 @@ bool ApplyUpdatePayload(const string& payload,
     LOG(ERROR) << "Error initializing the BootControlInterface.";
     return false;
   }
-
+#ifndef USE_LE_MODE
   std::unique_ptr<HardwareInterface> hardware = hardware::CreateHardware();
   if (!hardware) {
     LOG(ERROR) << "Error initializing the HardwareInterface.";
     return false;
   }
-
+#endif
+#ifndef USE_LE_MODE
   UpdateAttempterAndroid update_attempter(
       &sideload_daemon_state, &prefs, boot_control.get(), hardware.get());
+#else
+  UpdateAttempterAndroid update_attempter(
+      &sideload_daemon_state, &prefs, boot_control.get(), NULL);
+#endif
   update_attempter.Init();
 
   TEST_AND_RETURN_FALSE(update_attempter.ApplyPayload(
@@ -180,10 +261,11 @@ bool ApplyUpdatePayload(const string& payload,
 
   loop.Run();
   return sideload_daemon_state.status() == UpdateStatus::UPDATED_NEED_REBOOT;
+#endif
 }
 
-}  // namespace
 }  // namespace chromeos_update_engine
+
 
 int main(int argc, char** argv) {
   DEFINE_string(payload,
@@ -215,10 +297,27 @@ int main(int argc, char** argv) {
 
   vector<string> headers = base::SplitString(
       FLAGS_headers, "\n", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+#ifdef USE_LE_MODE
+  int64_t update_status_fd = -1;
+  for(size_t i = 0; i < headers.size(); ++i) {
+        LOG(INFO) << " headers strings split :"<< headers[i];
+  }
+#endif
 
+#ifndef USE_LE_MODE
   if (!chromeos_update_engine::ApplyUpdatePayload(
           FLAGS_payload, FLAGS_offset, FLAGS_size, headers, FLAGS_status_fd))
     return 1;
+#else
 
+    if (argc == 1) {
+        stream_update_service_init();
+    } else {
+        sp<IStreamUpdateService> stream_update_service = getStreamUpdateService();
+        LOG(INFO) << "Client init ";
+        stream_update_service->applyUpdatePayload(FLAGS_payload, FLAGS_offset, FLAGS_size, headers, update_status_fd);
+        LOG(INFO) << "exit from client";
+    }
+#endif
   return 0;
 }

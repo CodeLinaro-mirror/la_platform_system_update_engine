@@ -80,8 +80,9 @@ struct OmahaResponse {
   // aka "Pacific Time".)
   int install_date_days = -1;
 };
+#ifndef USE_LE_MODE
 static_assert(sizeof(off_t) == 8, "off_t not 64 bit");
-
+#endif
 }  // namespace chromeos_update_engine
 
 #endif  // UPDATE_ENGINE_OMAHA_RESPONSE_H_

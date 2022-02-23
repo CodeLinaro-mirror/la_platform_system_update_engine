@@ -22,8 +22,9 @@
 
 #include <algorithm>
 
+#ifndef USE_LE_MODE
 #include <bootloader.h>
-
+#endif
 #include <base/files/file_util.h>
 #include <base/strings/stringprintf.h>
 #include <brillo/make_unique_ptr.h>
@@ -59,6 +60,7 @@ const char kPropBuildDateUTC[] = "ro.build.date.utc";
 // Write a recovery command line |message| to the BCB. The arguments to recovery
 // must be separated by '\n'. An empty string will erase the BCB.
 bool WriteBootloaderRecoveryMessage(const string& message) {
+#ifndef USE_LE_MODE
   base::FilePath misc_device;
   if (!utils::DeviceForMountPoint("/misc", &misc_device))
     return false;
@@ -88,6 +90,8 @@ bool WriteBootloaderRecoveryMessage(const string& message) {
     return false;
   }
   return true;
+#endif
+  return false;
 }
 
 }  // namespace
@@ -122,7 +126,12 @@ bool HardwareAndroid::IsOfficialBuild() const {
   //
   // In case of a non-bool value, we take the most restrictive option and
   // assume we are in an official-build.
+#ifndef USE_LE_MODE
   return property_get_bool("ro.secure", 1) != 0;
+#else
+  LOG(WARNING) << "NA android HARDWARE not support.";
+  return false;
+#endif
 }
 
 bool HardwareAndroid::IsNormalBootMode() const {
@@ -130,11 +139,21 @@ bool HardwareAndroid::IsNormalBootMode() const {
   // update_engine will allow extra developers options, such as providing a
   // different update URL. In case of error, we assume the build is in
   // normal-mode.
+#ifndef USE_LE_MODE
   return property_get_bool("ro.debuggable", 0) != 1;
+#else
+  LOG(WARNING) << "TBD enable check for pref build.";
+  return false;
+#endif
 }
 
 bool HardwareAndroid::AreDevFeaturesEnabled() const {
+#ifndef USE_LE_MODE
   return !IsNormalBootMode();
+#else
+  LOG(WARNING) << "TBD enable check for debug build.";
+  return true;
+#endif
 }
 
 bool HardwareAndroid::IsOOBEEnabled() const {
@@ -202,7 +221,12 @@ bool HardwareAndroid::GetPowerwashSafeDirectory(base::FilePath* path) const {
 }
 
 int64_t HardwareAndroid::GetBuildTimestamp() const {
+#ifndef USE_LE_MODE
   return property_get_int64(kPropBuildDateUTC, 0);
+#else
+  LOG(WARNING) << " TBD get actual build time and date .";
+  return 912;
+#endif
 }
 
 }  // namespace chromeos_update_engine

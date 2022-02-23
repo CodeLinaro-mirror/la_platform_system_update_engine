@@ -105,8 +105,9 @@ CURLcode CertificateChecker::ProcessSSLContext(CURL* curl_handle,
       verify_callback = nullptr;
       break;
   }
-
+#ifndef USE_LE_MODE
   SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER, verify_callback);
+#endif
   return CURLE_OK;
 }
 

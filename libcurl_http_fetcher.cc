@@ -100,10 +100,17 @@ LibcurlHttpFetcher::LibcurlHttpFetcher(ProxyResolver* proxy_resolver,
     : HttpFetcher(proxy_resolver), hardware_(hardware) {
   // Dev users want a longer timeout (180 seconds) because they may
   // be waiting on the dev server to build an image.
+#ifndef USE_LE_MODE
   if (!hardware_->IsOfficialBuild())
     low_speed_time_seconds_ = kDownloadDevModeLowSpeedTimeSeconds;
   if (hardware_->IsOOBEEnabled() && !hardware_->IsOOBEComplete(nullptr))
     max_retry_count_ = kDownloadMaxRetryCountOobeNotComplete;
+#else
+    LOG(INFO) << " LibcurlHttpFetcher kDownloadDevModeLowSpeedTimeSeconds" << kDownloadDevModeLowSpeedTimeSeconds;
+    LOG(INFO) << " LibcurlHttpFetcher kDownloadMaxRetryCountOobeNotComplete" << kDownloadMaxRetryCountOobeNotComplete;
+    low_speed_time_seconds_ = kDownloadDevModeLowSpeedTimeSeconds;
+    max_retry_count_ = kDownloadMaxRetryCountOobeNotComplete;
+#endif
 }
 
 LibcurlHttpFetcher::~LibcurlHttpFetcher() {
@@ -265,11 +272,15 @@ void LibcurlHttpFetcher::ResumeTransfer(const string& url) {
 
   // Lock down the appropriate curl options for HTTP or HTTPS depending on
   // the url.
+#ifndef USE_LE_MODE
   if (hardware_->IsOfficialBuild()) {
+#endif
     if (base::StartsWith(
             url_, "http://", base::CompareCase::INSENSITIVE_ASCII)) {
       SetCurlOptionsForHttp();
-    } else if (base::StartsWith(
+    }
+#ifndef USE_LE_MODE
+ else if (base::StartsWith(
                    url_, "https://", base::CompareCase::INSENSITIVE_ASCII)) {
       SetCurlOptionsForHttps();
 #if !defined(__CHROMEOS__) && !defined(__BRILLO__)
@@ -286,7 +297,7 @@ void LibcurlHttpFetcher::ResumeTransfer(const string& url) {
     LOG(INFO) << "Not setting http(s) curl options because we are "
               << "running a dev/test image";
   }
-
+#endif
   CHECK_EQ(curl_multi_add_handle(curl_multi_handle_, curl_handle_), CURLM_OK);
   transfer_in_progress_ = true;
 }

@@ -31,8 +31,9 @@
 #include <brillo/message_loops/message_loop.h>
 #include <brillo/process.h>
 #include <brillo/process_reaper.h>
+#ifndef USE_LE_MODE
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
-
+#endif
 // The Subprocess class is a singleton. It's used to spawn off a subprocess
 // and get notified when the subprocess exits. The result of Exec() can
 // be saved and used to cancel the callback request and kill your process. If
@@ -105,8 +106,9 @@ class Subprocess {
   bool SubprocessInFlight();
 
  private:
+#ifndef USE_LE_MODE
   FRIEND_TEST(SubprocessTest, CancelTest);
-
+#endif
   struct SubprocessRecord {
     explicit SubprocessRecord(const ExecCallback& callback)
       : callback(callback) {}

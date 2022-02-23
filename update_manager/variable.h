@@ -26,8 +26,9 @@
 #include <base/logging.h>
 #include <base/time/time.h>
 #include <brillo/message_loops/message_loop.h>
+#ifndef USE_LE_MODE
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
-
+#endif
 namespace chromeos_update_manager {
 
 // The VariableMode specifies important behavior of the variable in terms of
@@ -136,10 +137,11 @@ class BaseVariable {
 
  private:
   friend class UmEvaluationContextTest;
+#ifndef USE_LE_MODE
   FRIEND_TEST(UmBaseVariableTest, RepeatedObserverTest);
   FRIEND_TEST(UmBaseVariableTest, NotifyValueChangedTest);
   FRIEND_TEST(UmBaseVariableTest, NotifyValueRemovesObserversTest);
-
+#endif
   BaseVariable(const std::string& name, VariableMode mode,
                base::TimeDelta poll_interval)
     : name_(name), mode_(mode),
@@ -196,8 +198,9 @@ class Variable : public BaseVariable {
 
   // Needed to be able to verify variable contents during unit testing.
   friend class UmTestUtils;
+#ifndef USE_LE_MODE
   FRIEND_TEST(UmRealRandomProviderTest, GetRandomValues);
-
+#endif
   Variable(const std::string& name, VariableMode mode)
       : BaseVariable(name, mode) {}
 

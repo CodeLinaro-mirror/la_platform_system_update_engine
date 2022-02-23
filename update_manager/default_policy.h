@@ -23,7 +23,9 @@
 #include <base/time/time.h>
 
 #include "update_engine/common/clock_interface.h"
+#ifndef USE_LE_MODE
 #include "update_engine/update_manager/policy.h"
+#endif
 
 namespace chromeos_update_manager {
 
@@ -64,6 +66,7 @@ class DefaultPolicy : public Policy {
   DefaultPolicy() : DefaultPolicy(nullptr) {}
   ~DefaultPolicy() override {}
 
+#ifndef USE_LE_MODE
   // Policy overrides.
   EvalStatus UpdateCheckAllowed(
       EvaluationContext* ec, State* state, std::string* error,
@@ -85,6 +88,7 @@ class DefaultPolicy : public Policy {
   EvalStatus P2PEnabledChanged(
       EvaluationContext* ec, State* state, std::string* error,
       bool* result, bool prev_result) const override;
+#endif
 
  protected:
   // Policy override.

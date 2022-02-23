@@ -50,6 +50,10 @@
 #include "update_engine/payload_consumer/payload_constants.h"
 #include "update_engine/payload_consumer/payload_verifier.h"
 #include "update_engine/payload_consumer/xz_extent_writer.h"
+#ifdef USE_LE_MODE
+#include <fstream>
+#include <brillo/secure_blob.h>
+#endif
 
 using google::protobuf::RepeatedPtrField;
 using std::min;
@@ -370,7 +374,9 @@ bool DeltaPerformer::OpenCurrentPartition() {
             << "\"";
 
   // Discard the end of the partition, but ignore failures.
+#ifndef USE_LE_MODE
   DiscardPartitionTail(target_fd_, install_part.target_size);
+#endif
 
   return true;
 }
@@ -410,13 +416,17 @@ bool DeltaPerformer::GetManifestOffset(uint64_t* out_offset) const {
     *out_offset = kDeltaManifestSizeOffset + kDeltaManifestSizeSize;
     return true;
   }
+#ifndef USE_LE_MODE
   if (major_payload_version_ == kBrilloMajorPayloadVersion) {
+#endif
     *out_offset = kDeltaManifestSizeOffset + kDeltaManifestSizeSize +
                   kDeltaMetadataSignatureSizeSize;
     return true;
+#ifndef USE_LE_MODE
   }
   LOG(ERROR) << "Unknown major payload version: " << major_payload_version_;
   return false;
+#endif
 }
 
 uint64_t DeltaPerformer::GetMetadataSize() const {
@@ -553,6 +563,7 @@ DeltaPerformer::MetadataParseResult DeltaPerformer::ParsePayloadMetadata(
 
   // We have the full metadata in |payload|. Verify its integrity
   // and authenticity based on the information we have in Omaha response.
+#ifndef USE_LE_MODE
   *error = ValidateMetadataSignature(payload);
   if (*error != ErrorCode::kSuccess) {
     if (install_plan_->hash_checks_mandatory) {
@@ -566,6 +577,7 @@ DeltaPerformer::MetadataParseResult DeltaPerformer::ParsePayloadMetadata(
     LOG(WARNING) << "Ignoring metadata signature validation failures";
     *error = ErrorCode::kSuccess;
   }
+#endif
 
   if (!GetManifestOffset(&manifest_offset)) {
     *error = ErrorCode::kUnsupportedMajorPayloadVersion;
@@ -1473,7 +1485,7 @@ ErrorCode DeltaPerformer::ValidateManifest() {
       return ErrorCode::kPayloadMismatchedType;
     }
   }
-
+#ifndef USE_LE_MODE
   if (manifest_.max_timestamp() < hardware_->GetBuildTimestamp()) {
     LOG(ERROR) << "The current OS build timestamp ("
                << hardware_->GetBuildTimestamp()
@@ -1481,6 +1493,7 @@ ErrorCode DeltaPerformer::ValidateManifest() {
                << manifest_.max_timestamp() << ")";
     return ErrorCode::kPayloadTimestampError;
   }
+#endif
 
   // TODO(garnold) we should be adding more and more manifest checks, such as
   // partition boundaries etc (see chromium-os:37661).
@@ -1566,6 +1579,7 @@ ErrorCode DeltaPerformer::VerifyPayload(
   // See if we should use the public RSA key in the Omaha response.
   base::FilePath path_to_public_key(public_key_path_);
   base::FilePath tmp_key;
+#ifndef USE_LE_MODE
   if (GetPublicKeyFromResponse(&tmp_key))
     path_to_public_key = tmp_key;
   ScopedPathUnlinker tmp_key_remover(tmp_key.value());
@@ -1580,7 +1594,7 @@ ErrorCode DeltaPerformer::VerifyPayload(
                       update_check_response_size ==
                       metadata_size_ + metadata_signature_size_ +
                       buffer_offset_);
-
+#endif
   // Verifies the payload hash.
   TEST_AND_RETURN_VAL(ErrorCode::kDownloadPayloadVerificationError,
                       !payload_hash_calculator_.raw_hash().empty());
@@ -1593,6 +1607,7 @@ ErrorCode DeltaPerformer::VerifyPayload(
     LOG(WARNING) << "Not verifying signed delta payload -- missing public key.";
     return ErrorCode::kSuccess;
   }
+#ifndef USE_LE_MODE
   TEST_AND_RETURN_VAL(ErrorCode::kSignedDeltaPayloadExpectedError,
                       !signatures_message_data_.empty());
   brillo::Blob hash_data = signed_hash_calculator_.raw_hash();
@@ -1608,7 +1623,7 @@ ErrorCode DeltaPerformer::VerifyPayload(
     LOG(ERROR) << "Public key verification failed, thus update failed.";
     return ErrorCode::kDownloadPayloadPubKeyVerificationError;
   }
-
+#endif
   LOG(INFO) << "Payload hash matches value in payload.";
 
   // At this point, we are guaranteed to have downloaded a full payload, i.e

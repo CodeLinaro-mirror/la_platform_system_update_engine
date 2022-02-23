@@ -23,8 +23,9 @@
 #include <string>
 
 #include <base/macros.h>
+#ifndef USE_LE_MODE
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
-
+#endif
 namespace chromeos_update_engine {
 
 class PrefsInterface;
@@ -121,10 +122,12 @@ class CertificateChecker {
   void SetObserver(Observer* observer) { observer_ = observer; }
 
  private:
+#ifndef USE_LE_MODE
   FRIEND_TEST(CertificateCheckerTest, NewCertificate);
   FRIEND_TEST(CertificateCheckerTest, SameCertificate);
   FRIEND_TEST(CertificateCheckerTest, ChangedCertificate);
   FRIEND_TEST(CertificateCheckerTest, FailedCertificate);
+#endif
 
   // These callbacks are asynchronously called by openssl after initial SSL
   // verification. They are used to perform any additional security verification

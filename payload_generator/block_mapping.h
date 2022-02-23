@@ -22,8 +22,9 @@
 #include <vector>
 
 #include <brillo/secure_blob.h>
+#ifndef USE_LE_MODE
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
-
+#endif
 #include "update_engine/payload_generator/payload_generation_config.h"
 
 namespace chromeos_update_engine {
@@ -57,8 +58,9 @@ class BlockMapping {
                          std::vector<BlockId>* block_ids);
 
  private:
+#ifndef USE_LE_MODE
   FRIEND_TEST(BlockMappingTest, BlocksAreNotKeptInMemory);
-
+#endif
   // Add a single block passed in |block_data|. If |fd| is not -1, the block
   // can be discarded to save RAM and retrieved later from |fd| at the position
   // |byte_offset|.

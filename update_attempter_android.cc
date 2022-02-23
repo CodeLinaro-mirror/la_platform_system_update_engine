@@ -39,7 +39,7 @@
 #include "update_engine/payload_consumer/postinstall_runner_action.h"
 #include "update_engine/update_status_utils.h"
 
-#ifndef _UE_SIDELOAD
+#ifdef _UE_SIDELOAD
 // Do not include support for external HTTP(s) urls when building
 // update_engine_sideload.
 #include "update_engine/libcurl_http_fetcher.h"
@@ -99,10 +99,12 @@ UpdateAttempterAndroid::~UpdateAttempterAndroid() {
 void UpdateAttempterAndroid::Init() {
   // In case of update_engine restart without a reboot we need to restore the
   // reboot needed state.
+#ifndef USE_LE_MODE
   if (UpdateCompletedOnThisBoot())
     SetStatusAndNotify(UpdateStatus::UPDATED_NEED_REBOOT);
   else
     SetStatusAndNotify(UpdateStatus::IDLE);
+#endif
 }
 
 bool UpdateAttempterAndroid::ApplyPayload(
@@ -169,7 +171,9 @@ bool UpdateAttempterAndroid::ApplyPayload(
   // The |public_key_rsa| key would override the public key stored on disk.
   install_plan_.public_key_rsa = "";
 
+#ifndef USE_LE_MODE
   install_plan_.hash_checks_mandatory = hardware_->IsOfficialBuild();
+#endif
   install_plan_.is_resume = !payload_id.empty() &&
                             DeltaPerformer::CanResumeUpdate(prefs_, payload_id);
   if (!install_plan_.is_resume) {
@@ -184,11 +188,14 @@ bool UpdateAttempterAndroid::ApplyPayload(
   install_plan_.target_slot = install_plan_.source_slot == 0 ? 1 : 0;
 
   int data_wipe = 0;
+#ifndef USE_LE_MODE
   install_plan_.powerwash_required =
       base::StringToInt(headers[kPayloadPropertyPowerwash], &data_wipe) &&
       data_wipe != 0;
+#endif
 
   NetworkId network_id = kDefaultNetworkId;
+#ifndef USE_LE_MODE
   if (!headers[kPayloadPropertyNetworkId].empty()) {
     if (!base::StringToUint64(headers[kPayloadPropertyNetworkId],
                               &network_id)) {
@@ -204,6 +211,7 @@ bool UpdateAttempterAndroid::ApplyPayload(
           "Unable to set network_id: " + headers[kPayloadPropertyNetworkId]);
     }
   }
+#endif
 
   LOG(INFO) << "Using this install plan:";
   install_plan_.Dump();
@@ -388,6 +396,10 @@ void UpdateAttempterAndroid::ProgressUpdate(double progress) {
 }
 
 void UpdateAttempterAndroid::UpdateBootFlags() {
+#ifdef USE_LE_MODE
+    CompleteUpdateBootFlags(true);
+	return;
+#else
   if (updated_boot_flags_) {
     LOG(INFO) << "Already updated boot flags. Skipping.";
     CompleteUpdateBootFlags(true);
@@ -401,6 +413,7 @@ void UpdateAttempterAndroid::UpdateBootFlags() {
     LOG(ERROR) << "Failed to mark current boot as successful.";
     CompleteUpdateBootFlags(false);
   }
+#endif
 }
 
 void UpdateAttempterAndroid::CompleteUpdateBootFlags(bool successful) {
@@ -459,12 +472,13 @@ void UpdateAttempterAndroid::BuildUpdateActions(const string& url) {
     download_fetcher = new FileFetcher();
   } else {
 #ifdef _UE_SIDELOAD
-    LOG(FATAL) << "Unsupported sideload URI: " << url;
-#else
+    DLOG(INFO) << "Using LibcurlHttpFetcher ";
     LibcurlHttpFetcher* libcurl_fetcher =
         new LibcurlHttpFetcher(&proxy_resolver_, hardware_);
     libcurl_fetcher->set_server_to_check(ServerToCheck::kDownload);
     download_fetcher = libcurl_fetcher;
+#else
+    LOG(FATAL) << "Unsupported sideload URI: " << url;
 #endif  // _UE_SIDELOAD
   }
   shared_ptr<DownloadAction> download_action(

@@ -18,9 +18,9 @@
 #define UPDATE_ENGINE_BOOT_CONTROL_ANDROID_H_
 
 #include <string>
-
+#ifndef USE_LE_MODE
 #include <android/hardware/boot/1.0/IBootControl.h>
-
+#endif
 #include "update_engine/common/boot_control.h"
 
 namespace chromeos_update_engine {
@@ -48,8 +48,9 @@ class BootControlAndroid : public BootControlInterface {
   bool MarkBootSuccessfulAsync(base::Callback<void(bool)> callback) override;
 
  private:
+#ifndef USE_LE_MODE
   ::android::sp<::android::hardware::boot::V1_0::IBootControl> module_;
-
+#endif
   DISALLOW_COPY_AND_ASSIGN(BootControlAndroid);
 };
 

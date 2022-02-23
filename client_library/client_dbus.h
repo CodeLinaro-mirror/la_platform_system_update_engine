@@ -25,8 +25,9 @@
 #include <base/macros.h>
 
 #include "update_engine/client_library/include/update_engine/client.h"
+#ifndef USE_LE_MODE
 #include "update_engine/dbus-proxies.h"
-
+#endif
 namespace update_engine {
 namespace internal {
 

@@ -30,7 +30,11 @@ const char kUpdatePayloadPublicKeyPath[] =
 const char kCACertificatesPath[] = "/system/etc/security/cacerts_google";
 // No deadline file API support on Android.
 const char kOmahaResponseDeadlineFile[] = "";
+#ifdef USE_LE_MODE
+const char kNonVolatileDirectory[] = "/tmp/gen";
+#else
 const char kNonVolatileDirectory[] = "/data/misc/update_engine";
+#endif
 const char kPostinstallMountOptions[] =
   "context=u:object_r:postinstall_file:s0";
 

@@ -29,8 +29,9 @@
 
 #include "update_engine/common/clock_interface.h"
 #include "update_engine/common/prefs_interface.h"
+#ifndef USE_LE_MODE
 #include "update_engine/update_manager/update_manager.h"
-
+#endif
 namespace chromeos_update_engine {
 
 // Interface for sharing and discovering files via p2p.
@@ -177,7 +178,9 @@ class P2PManager {
   static P2PManager* Construct(
       Configuration *configuration,
       ClockInterface *clock,
+#ifndef USE_LE_MODE
       chromeos_update_manager::UpdateManager* update_manager,
+#endif
       const std::string& file_extension,
       const int num_files_to_keep,
       const base::TimeDelta& max_file_age);

@@ -22,7 +22,9 @@
 #include "update_engine/payload_consumer/delta_performer.h"
 #include "update_engine/payload_generator/delta_diff_generator.h"
 #include "update_engine/payload_generator/delta_diff_utils.h"
+#ifndef USE_LE_MODE
 #include "update_engine/payload_generator/ext2_filesystem.h"
+#endif
 #include "update_engine/payload_generator/mapfile_filesystem.h"
 #include "update_engine/payload_generator/raw_filesystem.h"
 
@@ -47,7 +49,9 @@ bool PartitionConfig::OpenFilesystem() {
     return true;
   fs_interface.reset();
   if (diff_utils::IsExtFilesystem(path)) {
+#ifndef USE_LE_MODE
     fs_interface = Ext2Filesystem::CreateFromFile(path);
+#endif
     // TODO(deymo): The delta generator algorithm doesn't support a block size
     // different than 4 KiB. Remove this check once that's fixed. b/26972455
     if (fs_interface) {

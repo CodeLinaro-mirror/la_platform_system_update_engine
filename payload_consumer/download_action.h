@@ -192,8 +192,9 @@ class DownloadAction : public InstallPlanAction,
 
 // We want to be sure that we're compiled with large file support on linux,
 // just in case we find ourselves downloading large images.
+#ifndef USE_LE_MODE
 static_assert(8 == sizeof(off_t), "off_t not 64 bit");
-
+#endif
 }  // namespace chromeos_update_engine
 
 #endif  // UPDATE_ENGINE_PAYLOAD_CONSUMER_DOWNLOAD_ACTION_H_

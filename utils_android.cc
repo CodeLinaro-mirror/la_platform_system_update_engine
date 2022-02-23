@@ -28,7 +28,11 @@ namespace {
 // Open the appropriate fstab file and fallback to /fstab.device if
 // that's what's being used.
 static struct fstab* OpenFSTab() {
+#ifndef USE_LE_MODE
   struct fstab* fstab = fs_mgr_read_fstab_default();
+#else
+  struct fstab* fstab;
+#endif
   if (fstab != nullptr)
     return fstab;
 

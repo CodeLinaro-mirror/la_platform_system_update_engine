@@ -13,6 +13,40 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
+// Changes from Qualcomm Innovation Center are provided under the following license:
+//
+// Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted (subject to the limitations in the
+// disclaimer below) provided that the following conditions are met:
+//
+//    * Redistributions of source code must retain the above copyright
+//      notice, this list of conditions and the following disclaimer.
+//
+//    * Redistributions in binary form must reproduce the above
+//      copyright notice, this list of conditions and the following
+//      disclaimer in the documentation and/or other materials provided
+//      with the distribution.
+//
+//    * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
+//      contributors may be used to endorse or promote products derived
+//      from this software without specific prior written permission.
+//
+// NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
+// GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
+// HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
+// WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+// MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+// IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+// ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+// DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+// GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+// IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+// OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+// IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+//
 
 #include "update_engine/boot_control_android.h"
 
@@ -25,9 +59,14 @@
 
 #include "update_engine/common/utils.h"
 #include "update_engine/utils_android.h"
+#ifdef USE_LE_MODE
+#include "libabctl.h"
 
+#define MAX_SLOTS (2)
+#endif
 using std::string;
 
+#ifndef USE_LE_MODE
 using android::hardware::Return;
 using android::hardware::boot::V1_0::BoolResult;
 using android::hardware::boot::V1_0::CommandResult;
@@ -39,12 +78,15 @@ auto StoreResultCallback(CommandResult* dest) {
   return [dest](const CommandResult& result) { *dest = result; };
 }
 }  // namespace
-
+#endif
 namespace chromeos_update_engine {
 
 namespace boot_control {
-
+#ifdef USE_LE_MODE
+  static int MAX_NUM_SLOTS = 2;
+#endif
 // Factory defined in boot_control.h.
+#ifndef USE_LE_MODE
 std::unique_ptr<BootControlInterface> CreateBootControl() {
   std::unique_ptr<BootControlAndroid> boot_control(new BootControlAndroid());
   if (!boot_control->Init()) {
@@ -52,10 +94,12 @@ std::unique_ptr<BootControlInterface> CreateBootControl() {
   }
   return std::move(boot_control);
 }
+#endif
 
 }  // namespace boot_control
 
 bool BootControlAndroid::Init() {
+#ifndef USE_LE_MODE
   module_ = IBootControl::getService();
   if (module_ == nullptr) {
     LOG(ERROR) << "Error getting bootctrl HIDL module.";
@@ -63,16 +107,27 @@ bool BootControlAndroid::Init() {
   }
 
   LOG(INFO) << "Loaded boot control hidl hal.";
-
+#endif
   return true;
 }
 
 unsigned int BootControlAndroid::GetNumSlots() const {
+#ifndef USE_LE_MODE
   return module_->getNumberSlots();
+#else
+  return MAX_SLOTS;
+#endif
 }
 
 BootControlInterface::Slot BootControlAndroid::GetCurrentSlot() const {
+#ifndef USE_LE_MODE
   return module_->getCurrentSlot();
+#else
+  if(libabctl_getSuccessStatus(0) == 1)
+	 return 0;
+  else if(libabctl_getSuccessStatus(1) == 1)
+	 return 1;
+#endif
 }
 
 bool BootControlAndroid::GetPartitionDevice(const string& partition_name,
@@ -97,6 +152,7 @@ bool BootControlAndroid::GetPartitionDevice(const string& partition_name,
   // of misc and then finding an entry in /dev matching the sysfs
   // entry.
 
+#ifndef USE_LE_MODE
   base::FilePath misc_device;
   if (!utils::DeviceForMountPoint("/misc", &misc_device))
     return false;
@@ -126,10 +182,12 @@ bool BootControlAndroid::GetPartitionDevice(const string& partition_name,
   }
 
   *device = path.value();
+#endif
   return true;
 }
 
 bool BootControlAndroid::IsSlotBootable(Slot slot) const {
+#ifndef USE_LE_MODE
   Return<BoolResult> ret = module_->isSlotBootable(slot);
   if (!ret.isOk()) {
     LOG(ERROR) << "Unable to determine if slot " << SlotName(slot)
@@ -142,9 +200,12 @@ bool BootControlAndroid::IsSlotBootable(Slot slot) const {
     return false;
   }
   return ret == BoolResult::TRUE;
+#endif
+  return true;
 }
 
 bool BootControlAndroid::MarkSlotUnbootable(Slot slot) {
+#ifndef USE_LE_MODE
   CommandResult result;
   auto ret = module_->setSlotAsUnbootable(slot, StoreResultCallback(&result));
   if (!ret.isOk()) {
@@ -158,9 +219,18 @@ bool BootControlAndroid::MarkSlotUnbootable(Slot slot) {
                << " as unbootable: " << result.errMsg.c_str();
   }
   return result.success;
+#else
+  int ret = libabctl_setUnbootable(slot);
+  if(ret == 0) {
+    return true;
+  } else {
+    return false;
+  }
+#endif
 }
 
 bool BootControlAndroid::SetActiveBootSlot(Slot slot) {
+#ifndef USE_LE_MODE
   CommandResult result;
   auto ret = module_->setActiveBootSlot(slot, StoreResultCallback(&result));
   if (!ret.isOk()) {
@@ -173,10 +243,19 @@ bool BootControlAndroid::SetActiveBootSlot(Slot slot) {
                << ": " << result.errMsg.c_str();
   }
   return result.success;
+#else
+  int ret = libabctl_setActive(slot);
+  if(ret == 0) {
+    return true;
+  } else {
+    return false;
+  }
+#endif
 }
 
 bool BootControlAndroid::MarkBootSuccessfulAsync(
     base::Callback<void(bool)> callback) {
+#ifndef USE_LE_MODE
   CommandResult result;
   auto ret = module_->markBootSuccessful(StoreResultCallback(&result));
   if (!ret.isOk()) {
@@ -190,6 +269,14 @@ bool BootControlAndroid::MarkBootSuccessfulAsync(
   return brillo::MessageLoop::current()->PostTask(
              FROM_HERE, base::Bind(callback, result.success)) !=
          brillo::MessageLoop::kTaskIdNull;
+#else
+  int ret = libabctl_SetBootSuccess();
+  if (ret != 0) {
+    LOG(ERROR) << "Unable to call MarkBootSuccessful: ";
+    return false;
+  }
+  return true;
+#endif
 }
 
 }  // namespace chromeos_update_engine

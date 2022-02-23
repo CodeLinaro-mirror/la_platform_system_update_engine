@@ -21,8 +21,9 @@
 #include <vector>
 
 #include <brillo/secure_blob.h>
+#ifndef USE_LE_MODE
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
-
+#endif
 #include "update_engine/payload_generator/annotated_operation.h"
 #include "update_engine/payload_generator/payload_generation_config.h"
 #include "update_engine/update_metadata.pb.h"
@@ -55,8 +56,9 @@ class PayloadFile {
                     uint64_t* metadata_size_out);
 
  private:
+#ifndef USE_LE_MODE
   FRIEND_TEST(PayloadFileTest, ReorderBlobsTest);
-
+#endif
   // Computes a SHA256 hash of the given buf and sets the hash value in the
   // operation so that update_engine could verify. This hash should be set
   // for all operations that have a non-zero data blob. One exception is the

@@ -101,12 +101,14 @@ class UpdateManager {
   State* state() { return state_.get(); }
 
  private:
+#ifndef USE_LE_MODE
   FRIEND_TEST(UmUpdateManagerTest, PolicyRequestCallsPolicy);
   FRIEND_TEST(UmUpdateManagerTest, PolicyRequestCallsDefaultOnError);
   FRIEND_TEST(UmUpdateManagerTest, PolicyRequestDoesntBlockDeathTest);
   FRIEND_TEST(UmUpdateManagerTest, AsyncPolicyRequestDelaysEvaluation);
   FRIEND_TEST(UmUpdateManagerTest, AsyncPolicyRequestTimeoutDoesNotFire);
   FRIEND_TEST(UmUpdateManagerTest, AsyncPolicyRequestTimesOut);
+#endif
 
   // EvaluatePolicy() evaluates the passed |policy_method| method on the current
   // policy with the given |args| arguments. If the method fails, the default

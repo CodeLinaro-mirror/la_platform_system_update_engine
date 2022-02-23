@@ -18,9 +18,9 @@
 #define UPDATE_ENGINE_COMMON_TERMINATOR_H_
 
 #include <signal.h>
-
+#ifndef USE_LE_MODE
 #include <gtest/gtest_prod.h>  // for FRIEND_TEST
-
+#endif
 namespace chromeos_update_engine {
 
 // A class allowing graceful delayed exit.
@@ -44,9 +44,10 @@ class Terminator {
   static bool exit_requested() { return exit_requested_ != 0; }
 
  private:
+#ifndef USE_LE_MODE
   FRIEND_TEST(TerminatorTest, HandleSignalTest);
   FRIEND_TEST(TerminatorDeathTest, ScopedTerminatorExitUnblockerExitTest);
-
+#endif
   // The signal handler.
   static void HandleSignal(int signum);
 

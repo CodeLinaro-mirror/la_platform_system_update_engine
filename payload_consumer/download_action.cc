@@ -193,11 +193,13 @@ void DownloadAction::PerformAction() {
     payload_ = &install_plan_.payloads[0];
 
   LOG(INFO) << "Marking new slot as unbootable";
+#ifndef USE_LE_MODE
   if (!boot_control_->MarkSlotUnbootable(install_plan_.target_slot)) {
     LOG(WARNING) << "Unable to mark new slot "
                  << BootControlInterface::SlotName(install_plan_.target_slot)
                  << ". Proceeding with the update anyway.";
   }
+#endif
 
   StartDownloading();
 }

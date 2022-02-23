@@ -31,6 +31,9 @@
 #include "update_engine/certificate_checker.h"
 #include "update_engine/common/hardware_interface.h"
 #include "update_engine/common/http_fetcher.h"
+#ifdef USE_LE_MODE
+#define AID_OTA_UPDATE 1061      /* resource tracking UID for OTA updates */
+#endif
 
 // This is a concrete implementation of HttpFetcher that uses libcurl to do the
 // http work.

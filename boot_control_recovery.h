@@ -18,10 +18,10 @@
 #define UPDATE_ENGINE_BOOT_CONTROL_RECOVERY_H_
 
 #include <string>
-
+#ifndef USE_LE_MODE
 #include <hardware/boot_control.h>
 #include <hardware/hardware.h>
-
+#endif
 #include "update_engine/common/boot_control.h"
 
 namespace chromeos_update_engine {
@@ -49,11 +49,15 @@ class BootControlRecovery : public BootControlInterface {
   bool MarkSlotUnbootable(BootControlInterface::Slot slot) override;
   bool SetActiveBootSlot(BootControlInterface::Slot slot) override;
   bool MarkBootSuccessfulAsync(base::Callback<void(bool)> callback) override;
-
+#ifdef USE_LE_MODE
+  char* getMtdBlock(char* rootfs_volume) const ;
+#endif
  private:
   // NOTE: There is no way to release/unload HAL implementations so
   // this is essentially leaked on object destruction.
+#ifndef USE_LE_MODE
   boot_control_module_t* module_;
+#endif
 
   DISALLOW_COPY_AND_ASSIGN(BootControlRecovery);
 };

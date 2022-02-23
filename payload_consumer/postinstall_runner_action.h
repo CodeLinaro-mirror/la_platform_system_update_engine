@@ -21,8 +21,9 @@
 #include <vector>
 
 #include <brillo/message_loops/message_loop.h>
+#ifndef USE_LE_MODE
 #include <gtest/gtest_prod.h>
-
+#endif
 #include "update_engine/common/action.h"
 #include "update_engine/common/boot_control_interface.h"
 #include "update_engine/common/hardware_interface.h"
@@ -64,7 +65,9 @@ class PostinstallRunnerAction : public InstallPlanAction {
 
  private:
   friend class PostinstallRunnerActionTest;
+#ifndef USE_LE_MODE
   FRIEND_TEST(PostinstallRunnerActionTest, ProcessProgressLineTest);
+#endif
 
   void PerformPartitionPostinstall();
 
