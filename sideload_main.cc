@@ -53,6 +53,10 @@
 #include <string>
 #include <vector>
 
+#include <string>
+#include <iostream>
+#include <sstream>
+#include <fstream>
 #include <base/command_line.h>
 #include <base/logging.h>
 #include <base/strings/string_split.h>
@@ -313,9 +317,27 @@ int main(int argc, char** argv) {
     if (argc == 1) {
         stream_update_service_init();
     } else {
+        std::ifstream payload_prop;
+        size_t index = 0;
+        int64_t payload_offset = 0;
+        int64_t payload_size;
+        vector<string> payload_header;
+        payload_prop.open("/data/stream_update/properties.txt");
+        for(std::string metadata; std::getline(payload_prop, metadata); ) {
+           LOG(INFO) << "\n" << metadata;
+           payload_header.push_back(metadata);
+        }
+        std::string::size_type strtype;
+        std::string size = payload_header[1].substr(10, 8);
+        payload_size = std::stoi( size,&strtype ); // "The size of the CrAU part of the payload. If 0 is passed, it "
+                                                  // "will be autodetected."
+        LOG(INFO) << " update_engine_client payload size :" << payload_size;
+        for(size_t i = 0; i < payload_header.size(); ++i) {
+          LOG(INFO) << " update_engine_client headers strings split :" << payload_header[i];
+        }
         sp<IStreamUpdateService> stream_update_service = getStreamUpdateService();
         LOG(INFO) << "Client init ";
-        stream_update_service->applyUpdatePayload(FLAGS_payload, FLAGS_offset, FLAGS_size, headers, update_status_fd);
+        stream_update_service->applyUpdatePayload(FLAGS_payload, payload_offset, payload_size, payload_header, update_status_fd);
         LOG(INFO) << "exit from client";
     }
 #endif

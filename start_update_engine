@@ -64,17 +64,24 @@
 set -e
 
 case "$1" in
-  start)
-    echo "Starting Stream update engine client"
-    /usr/bin/update_engine_client
-    echo "done"
-    ;;
-  stop)
-    echo "No need to stop Stream update engine client"
-    ;;
-
-*)
-    exit 1
-;;
+start)
+        echo -n "Starting Stream update engine "
+        start-stop-daemon -S -b -a /usr/bin/update_engine_client
+        echo "done"
+        ;;
+    stop)
+        echo -n "Stopping Stream update engine "
+        start-stop-daemon -K -n update_engine_client
+        echo "done"
+        ;;
+    restart)
+        echo -n "Restarting Stream update engine "
+        $0 stop
+        $0 start
+        ;;
+    *)
+        echo "Usage update_engine_client { start | stop | restart }" >&2
+        exit 1
+        ;;
 esac
 exit 0

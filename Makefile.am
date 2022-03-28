@@ -55,7 +55,6 @@ AM_CPPFLAGS := \
               -I$(WORKSPACE)/OTA/streaming/external/libbrillo \
               -I$(WORKSPACE)/system/core/include \
               -I$(WORKSPACE)/system/core/base/include \
-              -I$(WORKSPACE)/system/core/fs_mgr/include \
               -I$(WORKSPACE)/system/core/adb \
               $(LIBSELINUX_CFLAGS) \
               -I$(WORKSPACE)/OTA/streaming/frameworks/native/libs/binder/include \
@@ -181,8 +180,7 @@ libupdate_engine_client_la_SOURCES := \
     ../update_engine/libcurl_http_fetcher.cc \
     ../update_engine/proxy_resolver.cc \
     ../update_engine/update_attempter_android.cc \
-    ../update_engine/update_status_utils.cc \
-    ../update_engine/utils_android.cc
+    ../update_engine/update_status_utils.cc
 
 if USE_GLIB
 libupdate_engine_client_la_CFLAGS := $(AM_CFLAGS) $(UE_CFLAGS) -DUSE_GLIB @GLIB_CFLAGS@
@@ -219,7 +217,6 @@ requiredlibs := -lm \
                -lz \
                -lmincrypt \
                -lselinux \
-               -lfs_mgr \
                -lcutils \
                -llog \
                -lprotobuf \
@@ -239,7 +236,6 @@ delta_generator_requiredlibs := -lm \
                -lz \
                -lmincrypt \
                -lselinux \
-               -lfs_mgr \
                -lprotobuf \
                ./libpayload_generator.la \
                ./libpayload_consumer.la \
@@ -297,8 +293,7 @@ update_engine_sideload_src_files := \
     ../update_engine/sideload_main.cc \
     ../update_engine/update_attempter_android.cc \
     ../update_engine/update_status_utils.cc \
-    ../update_engine/update_engine_service.cc \
-    ../update_engine/utils_android.cc
+    ../update_engine/update_engine_service.cc
 
 
 update_engine_sideload_SOURCES := $(update_engine_sideload_src_files)
@@ -308,7 +303,6 @@ update_engine_sideload_requiredlibs := -lm \
                -lz \
                -lmincrypt \
                -lselinux \
-               -lfs_mgr \
                -lbssl \
                -lbrillo \
                -lchrome \
