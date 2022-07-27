@@ -144,6 +144,14 @@ libpayload_consumer_la_LIBADD := -lm -lpthread -levent  -lprotobuf -lbspatch -lx
 libpayload_consumer_la_LDFLAGS := -all-static
 endif
 
+if TARGET_NAND_BOOT
+AM_CFLAGS += -DUSE_MTD=1
+AM_CPPFLAGS += -DUSE_MTD=1
+libpayload_consumer_la_SOURCES += \
+        ../update_engine/payload_consumer/mtd_file_descriptor.cc
+libpayload_consumer_la_LIBADD += -ltelaf_flash_access
+endif
+
 if !BUILD_HOST
 lib_LTLIBRARIES += libupdate_engine_client.la
 endif
@@ -294,12 +302,12 @@ update_engine_sideload_requiredlibs := -lm \
                -lxz \
                -lcrypto \
                -labctl \
-               -lmtdutils
+               -ltelaf_flash_access
 
 if USE_GLIB
 update_engine_sideload_CFLAGS := $(AM_CFLAGS) -DRECOVERY_API_VERSION=$(RECOVERY_API_VERSION) -DUSE_GLIB @GLIB_CFLAGS@
 update_engine_sideload_CPPFLAGS := $(AM_CPPFLAGS) -DRECOVERY_API_VERSION=$(RECOVERY_API_VERSION) -DUSE_GLIB @GLIB_CFLAGS@
-update_engine_sideload_LDADD := $(update_engine_sideload_requiredlibs) -lext4_utils -lmincrypt  @GLIB_LIBS@
+update_engine_sideload_LDADD := $(update_engine_sideload_requiredlibs) -lext4_utils -lmincrypt @GLIB_LIBS@
 else
 update_engine_sideload_CFLAGS := $(AM_CFLAGS)  -DRECOVERY_API_VERSION=$(RECOVERY_API_VERSION)
 update_engine_sideload_CPPFLAGS :=  $(AM_CPPFLAGS) -DRECOVERY_API_VERSION=$(RECOVERY_API_VERSION)

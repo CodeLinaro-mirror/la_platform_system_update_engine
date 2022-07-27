@@ -67,6 +67,10 @@
 #endif
 using std::string;
 
+#ifdef USE_MTD
+#define FLASH_ACCESS 1
+#endif
+
 #ifndef _UE_SIDELOAD
 #error "BootControlRecovery should only be used for update_engine_sideload."
 #endif
@@ -215,24 +219,27 @@ bool BootControlRecovery::GetPartitionDevice(const string& partition_name,
       printf(" libabctl error aborting!\n");
      return false;
   }
-  LOG(INFO) << "boot_control current active slot  " << chromeos_update_engine::boot_control::boot_slot;
   // Set the inactive slot to the non-boot slot (1->0, 0->1)
   chromeos_update_engine::boot_control::inactive_slot = (chromeos_update_engine::boot_control::boot_slot + 1)%2;
   LOG(INFO) << "boot_control current inactive slot  " << chromeos_update_engine::boot_control::inactive_slot;
   char *inactive_mtd_block;
   char inactive_partition[PATH_MAX];
+  std::string str;
   snprintf(inactive_partition, sizeof(inactive_partition), "%s%s", partition_name.c_str(),
       chromeos_update_engine::boot_control::slot_suffix_arr[chromeos_update_engine::boot_control::inactive_slot]);
+#ifdef FLASH_ACCESS
+  str.assign(inactive_partition);
+#else
   LOG(INFO) << " boot_control inactive_partition  " << inactive_partition;
   inactive_mtd_block = BootControlRecovery::getMtdBlock(inactive_partition);
   LOG(INFO) << "boot_control inactive_mtd_block: " << inactive_mtd_block;
-  std::string str;
   str.assign(inactive_mtd_block);
-  LOG(INFO) << "boot_control inactive_mtd_block: " << str;
+#endif
   *device = str;
   return true;
 }
 
+#ifndef FLASH_ACCESS
 char* BootControlRecovery::getMtdBlock(char* rootfs_volume) const {
     int err = mtd_scan_partitions();
     if (err == -1){
@@ -248,6 +255,7 @@ char* BootControlRecovery::getMtdBlock(char* rootfs_volume) const {
     snprintf(mtd_devname, sizeof(mtd_devname), "/dev/mtdblock%d", mtd->device_index);
     return strdup(mtd_devname);
 }
+#endif
 
 bool BootControlRecovery::IsSlotBootable(Slot slot) const {
 #ifndef USE_LE_MODE

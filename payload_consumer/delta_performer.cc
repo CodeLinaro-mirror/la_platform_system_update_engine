@@ -55,6 +55,10 @@
 #include <brillo/secure_blob.h>
 #endif
 
+#if USE_MTD
+#define DEV_UBI_NODE                    "/dev/ubi%d_%d"
+#endif
+
 using google::protobuf::RepeatedPtrField;
 using std::min;
 using std::string;
@@ -87,27 +91,25 @@ const int kUbiVolumeAttachTimeout = 5 * 60;
 FileDescriptorPtr CreateFileDescriptor(const char* path) {
   FileDescriptorPtr ret;
 #if USE_MTD
-  if (strstr(path, "/dev/ubi") == path) {
-    if (!UbiFileDescriptor::IsUbi(path)) {
-      // The volume might not have been attached at boot time.
-      int volume_no;
-      if (utils::SplitPartitionName(path, nullptr, &volume_no)) {
-        utils::TryAttachingUbiVolume(volume_no, kUbiVolumeAttachTimeout);
-      }
-    }
-    if (UbiFileDescriptor::IsUbi(path)) {
-      LOG(INFO) << path << " is a UBI device.";
-      ret.reset(new UbiFileDescriptor);
-    }
-  } else if (MtdFileDescriptor::IsMtd(path)) {
-    LOG(INFO) << path << " is an MTD device.";
-    ret.reset(new MtdFileDescriptor);
-  } else {
-    LOG(INFO) << path << " is not an MTD nor a UBI device.";
-#endif
+  char mtd_no[32] = {"/dev/"};
+  int uid, vid, err;
+  err = MtdFileDescriptor::GetMtdno(path,(mtd_no+5));
+  if (err < 0) {
+    LOG(INFO) << " not an mtd or ubi device ";
     ret.reset(new EintrSafeFileDescriptor);
-#if USE_MTD
+    return ret;
   }
+  char ubi_path[64];
+  LOG(INFO) << " CreateFileDescriptor check device type first,  mtdno " << mtd_no;
+  string ubi_str(mtd_no); 
+  if (stoi(ubi_str.substr(8, 2)) > 35){
+    LOG(INFO) << " CreateFileDescriptor ubi device get ubi node " ;
+    ret.reset(new UbiFileDescriptor);
+  } else {
+    ret.reset(new MtdFileDescriptor);
+  }
+#else
+    ret.reset(new EintrSafeFileDescriptor);
 #endif
   return ret;
 }
@@ -119,11 +121,47 @@ FileDescriptorPtr OpenFile(const char* path, int mode, int* err) {
   // failure since this won't work when passing regular files.
   utils::SetBlockDeviceReadOnly(path, (mode & O_ACCMODE) == O_RDONLY);
 
-  FileDescriptorPtr fd = CreateFileDescriptor(path);
 #if USE_MTD
+  char dev_node[64];
+  char mtd_no[64] = {"/dev/"};
+  //int mtd_err = nad_get_mtdno(path,(mtd_no+5));
+  bool is_mtd = false;
+  bool is_ubi = false;
+  int mtd_err = MtdFileDescriptor::GetMtdno(path,(mtd_no+5));
+  if (mtd_err != 0)
+  {
+    LOG(INFO) << " no partition name found path ";
+    memcpy(dev_node, path, sizeof(path));
+  } else {
+    int uid, vid, err;
+    char ubi_path[64];
+    LOG(INFO) << " CreateFileDescriptor check device type first,  mtdno " << mtd_no;
+    memcpy(dev_node, mtd_no, sizeof(mtd_no));
+    snprintf(ubi_path, sizeof(ubi_path)-1, DEV_UBI_NODE, uid, vid);
+    string ubi_str(mtd_no);
+    if (stoi(ubi_str.substr(8, 2)) > 35){
+      err = UbiFileDescriptor::GetVolIdByName(path, &uid, &vid);
+      if (err < 0) {
+        LOG(ERROR) << " CreateFileDescriptor get ubi id error ";
+        return nullptr;
+      }
+      snprintf(ubi_path, sizeof(ubi_path)-1, DEV_UBI_NODE, uid, vid);
+      LOG(INFO) << " CreateFileDescriptor ubi_path  " << ubi_path;
+      memcpy(dev_node, ubi_path, sizeof(ubi_path)-1);
+      LOG(INFO) << " ubi device type set is_ubi ";
+      is_ubi = true;
+    } else {
+      LOG(INFO) << " mtd device type set is_mtd ";
+      is_mtd = true;
+    }
+  }
+#endif
+  FileDescriptorPtr fd = CreateFileDescriptor(path);
   // On NAND devices, we can either read, or write, but not both. So here we
   // use O_WRONLY.
-  if (UbiFileDescriptor::IsUbi(path) || MtdFileDescriptor::IsMtd(path)) {
+#if USE_MTD
+  if (is_ubi || is_mtd) {
+    LOG(INFO) << " set open mode as read write ";
     mode = O_WRONLY;
   }
 #endif

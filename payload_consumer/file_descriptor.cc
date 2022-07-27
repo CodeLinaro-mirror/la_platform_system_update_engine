@@ -124,6 +124,7 @@ bool EintrSafeFileDescriptor::BlkIoctl(int request,
 }
 
 bool EintrSafeFileDescriptor::Close() {
+  LOG(INFO) << "EintrSafeFileDescriptor::Close fd_ :" << fd_;
   CHECK_GE(fd_, 0);
   if (IGNORE_EINTR(close(fd_)))
     return false;

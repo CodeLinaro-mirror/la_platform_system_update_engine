@@ -51,6 +51,10 @@
 #include <base/strings/stringprintf.h>
 #include <brillo/data_encoding.h>
 
+#ifdef USE_MTD
+#define FLASH_ACCESS 1
+#endif
+
 #include "update_engine/common/clock_interface.h"
 #include "update_engine/common/constants.h"
 #include "update_engine/common/platform_constants.h"
@@ -58,6 +62,9 @@
 #include "update_engine/common/subprocess.h"
 #include "update_engine/payload_consumer/file_descriptor.h"
 #include "update_engine/payload_consumer/payload_constants.h"
+#if FLASH_ACCESS
+#include "update_engine/payload_consumer/mtd_file_descriptor.h"
+#endif
 
 using base::Time;
 using base::TimeDelta;
@@ -65,6 +72,7 @@ using std::min;
 using std::pair;
 using std::string;
 using std::vector;
+
 
 namespace chromeos_update_engine {
 
@@ -632,7 +640,13 @@ bool MakeTempFile(const string& base_filename_template,
 }
 
 bool SetBlockDeviceReadOnly(const string& device, bool read_only) {
+#if FLASH_ACCESS
+  char mtd_no[32] = {"/dev/"};
+  MtdFileDescriptor::GetMtdno (device.c_str(), (mtd_no+5)); 
+  int fd = HANDLE_EINTR(open(mtd_no, O_RDONLY | O_CLOEXEC));
+#else
   int fd = HANDLE_EINTR(open(device.c_str(), O_RDONLY | O_CLOEXEC));
+#endif
   if (fd < 0) {
     PLOG(ERROR) << "Opening block device " << device;
     return false;

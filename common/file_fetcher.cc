@@ -30,11 +30,19 @@
 #include "update_engine/common/hardware_interface.h"
 #include "update_engine/common/platform_constants.h"
 
+#ifdef USE_MTD
+#define FLASH_ACCESS 1
+#endif
+
 using std::string;
 
 namespace {
 
+#ifdef FLASH_ACCESS
+size_t kReadBufferSize = 256 * 1024;
+#else
 size_t kReadBufferSize = 16 * 1024;
+#endif
 
 }  // namespace
 

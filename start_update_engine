@@ -64,14 +64,14 @@
 set -e
 
 case "$1" in
-start)
-        echo -n "Starting update engine client with payload location fixed @path /data/stream_update/payload.bin "
+    start)
+        echo -n "Starting Stream update client "
         /usr/bin/update_engine_sideload --payload=file:///data/stream_update/payload.bin
         echo "done"
         ;;
     stop)
         echo -n "Stopping Stream update engine "
-        start-stop-daemon -K -n update_engine_client
+        start-stop-daemon -K -n update_engine_sideload
         echo "done"
         ;;
     restart)
@@ -80,8 +80,8 @@ start)
         $0 start
         ;;
     *)
-        echo "Usage start_update_engine start "  >&2
 
+        echo "Usage update_engine_sideload { start | stop | restart }" >&2
         exit 1
         ;;
 esac

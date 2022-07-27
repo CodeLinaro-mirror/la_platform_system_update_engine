@@ -20,12 +20,21 @@
 // This module defines file descriptors that deal with NAND media. We are
 // concerned with raw NAND access (as MTD device), and through UBI layer.
 
-#include <mtdutils.h>
+#define MAX_VOL_COUNT    32
+#define MAX_NAME_LEN     32
 
 #include "update_engine/payload_consumer/file_descriptor.h"
 
-namespace chromeos_update_engine {
+#if USE_MTD
+#define MRC_UNUSED(arg) (arg = arg)
+#define SYS_CLASS_UBI_DEV_PATH       "/sys/class/ubi/ubi%d/"
+#define SYS_CLASS_UBI_VOL_COUNT_PATH "/sys/class/ubi/ubi%d/volumes_count"
+#define SYS_CLASS_UBI_VOL_NAME_PATH  "/sys/class/ubi/ubi%d_%d/name"
+#define UBI_DEVICE_PATH              "/dev/ubi%d_%d"
+#endif
 
+
+namespace chromeos_update_engine {
 // A class defining the file descriptor API for raw MTD device. This file
 // descriptor supports either random read, or sequential write but not both at
 // once.
@@ -34,6 +43,7 @@ class MtdFileDescriptor : public EintrSafeFileDescriptor {
   MtdFileDescriptor();
 
   static bool IsMtd(const char* path);
+  static int GetMtdno (const char* parti_name, char* mtdno);
 
   bool Open(const char* path, int flags, mode_t mode) override;
   bool Open(const char* path, int flags) override;
@@ -50,9 +60,15 @@ class MtdFileDescriptor : public EintrSafeFileDescriptor {
   bool Close() override;
 
  private:
+#if !USE_MTD
   std::unique_ptr<MtdReadContext, decltype(&mtd_read_close)> read_ctx_;
   std::unique_ptr<MtdWriteContext, decltype(&mtd_write_close)> write_ctx_;
+#endif
   uint64_t nr_written_;
+  uint32_t total_blocks_number_;
+  uint32_t bad_blocks_number_;
+  uint32_t erase_size_;
+  uint32_t write_size_;
 };
 
 struct UbiVolumeInfo {
@@ -68,8 +84,16 @@ struct UbiVolumeInfo {
 // UBI_IOCVOLUP ioctl operation.
 class UbiFileDescriptor : public EintrSafeFileDescriptor {
  public:
+  UbiFileDescriptor();
   // Perform some queries about |path| to see if it is a UBI volume.
   static bool IsUbi(const char* path);
+#if USE_MTD
+  static int GetVolIdByName(const char *volname, int *ubi_id, int *vol_id);
+  static int GetVolName(int ubi_id, int vol_id, char *volname);
+  static int GetVolCount(int volcount[]);
+  static int GetStringFromFile(const char *path, char *data);
+  static int GetValueFromFile(const char *path);
+#endif
 
   bool Open(const char* path, int flags, mode_t mode) override;
   bool Open(const char* path, int flags) override;
@@ -94,6 +118,8 @@ class UbiFileDescriptor : public EintrSafeFileDescriptor {
   uint64_t usable_eb_blocks_;
   uint64_t eraseblock_size_;
   uint64_t volume_size_;
+  uint32_t leb_number_;
+  uint32_t free_leb_number_;
   uint64_t nr_written_;
 
   Mode mode_;

@@ -32,6 +32,17 @@
 #include "update_engine/common/subprocess.h"
 #include "update_engine/common/utils.h"
 
+#if USE_MTD
+extern "C" {
+#include "telaf-flash-access.h"
+}
+#endif
+
+#ifdef USE_GLIB
+#include <glib.h>
+#define strlcpy g_strlcpy
+#endif
+
 using std::string;
 using std::vector;
 
@@ -82,7 +93,9 @@ std::unique_ptr<UbiVolumeInfo> GetUbiVolumeInfo(const string& path) {
     return ret;
   }
 
+#if !USE_MTD
   ret.reset(new UbiVolumeInfo);
+#endif
   ret->reserved_ebs = reserved_ebs;
   ret->eraseblock_size = eb_size;
   return ret;
@@ -93,12 +106,29 @@ std::unique_ptr<UbiVolumeInfo> GetUbiVolumeInfo(const string& path) {
 namespace chromeos_update_engine {
 
 MtdFileDescriptor::MtdFileDescriptor()
+#if USE_MTD
+    {}
+#else
     : read_ctx_(nullptr, &mtd_read_close),
       write_ctx_(nullptr, &mtd_write_close) {}
+#endif
+
+#if USE_MTD
+UbiFileDescriptor::UbiFileDescriptor() {}
+#endif
 
 bool MtdFileDescriptor::IsMtd(const char* path) {
+#if !USE_MTD
   uint64_t size;
   return mtd_node_info(path, &size, nullptr, nullptr) == 0;
+#else
+  char mtd_no[32] = {"/dev/"};
+  int ret = MtdFileDescriptor::GetMtdno(path,(mtd_no+5));
+  if (ret == -1){
+    return false;
+  }
+  return true;
+#endif
 }
 
 bool MtdFileDescriptor::Open(const char* path, int flags, mode_t mode) {
@@ -111,22 +141,65 @@ bool MtdFileDescriptor::Open(const char* path, int flags, mode_t mode) {
     flags &= ~O_ACCMODE;
     flags |= O_RDWR;
   }
+#if !USE_MTD
   TEST_AND_RETURN_FALSE(
       EintrSafeFileDescriptor::Open(path, flags | O_CLOEXEC, mode));
+#endif
 
+  int ret = -1;
   if ((flags & O_ACCMODE) == O_RDWR) {
+#if !USE_MTD
     write_ctx_.reset(mtd_write_descriptor(fd_, path));
+#else
+    telaf_connect_to_flash_access();
+    ret = telaf_mtd_open (path);
+    if (ret != 0){
+       LOG(ERROR) << " MtdFileDescriptor open failed ";
+       return false;
+    }
+#endif
     nr_written_ = 0;
+
+    total_blocks_number_ = 0;
+    bad_blocks_number_ = 0;
+    erase_size_ = 0;
+    write_size_ = 0;
   } else {
+#if !USE_MTD
     read_ctx_.reset(mtd_read_descriptor(fd_, path));
+#endif
   }
 
+#if !USE_MTD
   if (!read_ctx_ && !write_ctx_) {
     Close();
     return false;
   }
-
   return true;
+#else
+  mtd_info_t *mtd_info;
+  mtd_info = (mtd_info_t *) malloc(sizeof(mtd_info_t));
+
+  ret = telaf_mtd_information(mtd_info);
+  if (ret != 0){
+    LOG(ERROR) << " telaf_mtd_information failed ";
+    return false;
+  }
+  total_blocks_number_ = mtd_info->blk_num;
+  bad_blocks_number_ = mtd_info->bad_blk_num;
+  erase_size_ = mtd_info->erase_size;
+  write_size_ = mtd_info->write_size;
+
+  for (int blk_num = 0 ; blk_num < total_blocks_number_ ; blk_num++) {
+    LOG(INFO) << " MtdFileDescriptor::Open erase block: "<< blk_num;
+    ret = telaf_mtd_erase_block (blk_num);
+    if( ret != 0) {
+      LOG(ERROR) << " MtdFileDescriptor::Open erase failed ";
+      return false;
+    }
+  }
+  return true;
+#endif
 }
 
 bool MtdFileDescriptor::Open(const char* path, int flags) {
@@ -136,11 +209,16 @@ bool MtdFileDescriptor::Open(const char* path, int flags) {
 }
 
 ssize_t MtdFileDescriptor::Read(void* buf, size_t count) {
+#if !USE_MTD
   CHECK(read_ctx_);
   return mtd_read_data(read_ctx_.get(), static_cast<char*>(buf), count);
+#else
+  return -1; // read is not performed here, its done in libbrillo file_stream.cc
+#endif
 }
 
 ssize_t MtdFileDescriptor::Write(const void* buf, size_t count) {
+#if !USE_MTD
   CHECK(write_ctx_);
   ssize_t result = mtd_write_data(write_ctx_.get(),
                                   static_cast<const char*>(buf),
@@ -149,21 +227,64 @@ ssize_t MtdFileDescriptor::Write(const void* buf, size_t count) {
     nr_written_ += result;
   }
   return result;
+#else
+
+  ssize_t ret = -1;
+  LOG(INFO) << " MtdFileDescriptor::Write mtd count:" << count;
+  // assume count is always multiple of erase_size_ for block based flash apis
+  // for last write operation count <= erase_size_ depending on image bondary
+  unsigned char* source = reinterpret_cast<unsigned char*>(const_cast<void*>(buf));
+  int pages_written = nr_written_/erase_size_;
+  if(count >= erase_size_) {
+    int iter = count/erase_size_;
+    unsigned char* source = reinterpret_cast<unsigned char*>(const_cast<void*>(buf));
+    unsigned char dest[erase_size_];
+    int pages_written = nr_written_/erase_size_;
+    for (int i=0 ; i < iter ; i++) {
+      memset(dest, 0, sizeof(dest));
+      memcpy(dest, source + i*erase_size_, erase_size_);
+      ret = telaf_mtd_write_block (dest ,  pages_written + i, erase_size_);
+      if (ret != 0) {
+        LOG(ERROR) << "MtdFileDescriptor::Write Failed";
+        return -1;
+      }
+    }
+  } else {
+    ret = telaf_mtd_write_block (reinterpret_cast<unsigned char*>(const_cast<void*>(buf)) , pages_written, count);
+    if (ret != 0) {
+      LOG(ERROR) << "MtdFileDescriptor::Write Failed";
+      return -1;
+    }
+  }
+  LOG(INFO) << " MtdFileDescriptor::Write chunk done";
+  nr_written_ += count;
+  return count;
+#endif
 }
 
 off64_t MtdFileDescriptor::Seek(off64_t offset, int whence) {
+#if USE_MTD
+    return nr_written_;
+#else
   if (write_ctx_) {
-    // Ignore seek in write mode.
     return nr_written_;
   }
+#endif
   return EintrSafeFileDescriptor::Seek(offset, whence);
 }
 
 bool MtdFileDescriptor::Close() {
-  read_ctx_.reset();
-  write_ctx_.reset();
+#if !USE_MTD
+    read_ctx_.reset();
+    write_ctx_.reset();
   return EintrSafeFileDescriptor::Close();
+#else
+  telaf_mtd_close();
+  return true;
+#endif
 }
+
+
 
 bool UbiFileDescriptor::IsUbi(const char* path) {
   base::FilePath device_node(path);
@@ -175,30 +296,59 @@ bool UbiFileDescriptor::IsUbi(const char* path) {
 }
 
 bool UbiFileDescriptor::Open(const char* path, int flags, mode_t mode) {
+  LOG(INFO) << "UbiFileDescriptor::Open 1.2 "<< path;
+#if !USE_MTD
   std::unique_ptr<UbiVolumeInfo> info = GetUbiVolumeInfo(path);
   if (!info) {
     return false;
   }
+#endif
 
   // This File Descriptor does not support read and write.
   TEST_AND_RETURN_FALSE((flags & O_ACCMODE) != O_RDWR);
+#if !USE_MTD
   TEST_AND_RETURN_FALSE(
       EintrSafeFileDescriptor::Open(path, flags | O_CLOEXEC, mode));
+#else
+  /* read mode second arg as 1, for write mode set it as 0 */
+  int ret = telaf_ubi_open (path, 0);
+  if (ret != 0){
+    LOG(ERROR) << " UbiFileDescriptor open failed ";
+    return false;
+  }
+  LOG(INFO) << "UbiFileDescriptor::Open ";
+  ret = telaf_ubi_info( &free_leb_number_, &leb_number_, &volume_size_);
+  if (ret != 0){
+    LOG(ERROR) << " UbiFileDescriptor open failed ";
+    return false;
+  }
 
+  ret = telaf_ubi_ioctl(volume_size_);
+  if (ret != 0){
+    LOG(ERROR) << " UbiFileDescriptor ioctl ";
+    return false;
+  }
+  LOG(INFO) << " UbiFileDescriptor ioctl ok ";
+#endif
+
+#if !USE_MTD
   usable_eb_blocks_ = info->reserved_ebs;
   eraseblock_size_ = info->eraseblock_size;
   volume_size_ = usable_eb_blocks_ * eraseblock_size_;
+#endif
 
   if ((flags & O_ACCMODE) == O_WRONLY) {
     // It's best to use volume update ioctl so that UBI layer will mark the
     // volume as being updated, and only clear that mark if the update is
     // successful. We will need to pad to the whole volume size at close.
+#if !USE_MTD
     uint64_t vsize = volume_size_;
     if (ioctl(fd_, UBI_IOCVOLUP, &vsize) != 0) {
       PLOG(ERROR) << "Cannot issue volume update ioctl";
       EintrSafeFileDescriptor::Close();
       return false;
     }
+#endif
     mode_ = kWriteOnly;
     nr_written_ = 0;
   } else {
@@ -221,10 +371,38 @@ ssize_t UbiFileDescriptor::Read(void* buf, size_t count) {
 
 ssize_t UbiFileDescriptor::Write(const void* buf, size_t count) {
   CHECK(mode_ == kWriteOnly);
-  ssize_t nr_chunk = EintrSafeFileDescriptor::Write(buf, count);
+  LOG(INFO) << "UbiFileDescriptor::Write " << count;
+  ssize_t nr_chunk;
+#if USE_MTD
+  int iter = count/16384;
+  char dest[16384];
+  char *source = reinterpret_cast<char*>(const_cast<void*>(buf));
+  for (int i=0 ; i < iter ; i++) {
+    LOG(INFO) << "UbiFileDescriptor::Write iter: " << iter;
+    memset(dest, 0, sizeof(dest));
+    memcpy(dest, source + i*16384, 16384);
+    int ret =  telaf_ubi_write (dest, 16384);
+    if(ret != 0) {
+      LOG(ERROR) << "UbiFileDescriptor::Write  error";
+      return -1;
+    } else {
+      LOG(INFO) << "UbiFileDescriptor::Write  ok";
+    }
+  }
+  if(count%16384)
+    LOG(INFO) << "UbiFileDescriptor::Write  count/16384 is 0";
+  else {
+    LOG(ERROR) << "UbiFileDescriptor::Write  count/16384 is not 0";
+  }
+ 
+  nr_chunk = count;
+#else
+  nr_chunk = EintrSafeFileDescriptor::Write(buf, count);
+#endif
   if (nr_chunk >= 0) {
     nr_written_ += nr_chunk;
   }
+  LOG(INFO) << "UbiFileDescriptor::Write " << nr_written_;
   return nr_chunk;
 }
 
@@ -233,33 +411,227 @@ off64_t UbiFileDescriptor::Seek(off64_t offset, int whence) {
     // Ignore seek in write mode.
     return nr_written_;
   }
+  //LOG(INFO) << "UbiFileDescriptor::Seek ";
   return EintrSafeFileDescriptor::Seek(offset, whence);
 }
 
 bool UbiFileDescriptor::Close() {
   bool pad_ok = true;
+#if USE_MTD
+  if (mode_ == kWriteOnly) {
+#else
   if (IsOpen() && mode_ == kWriteOnly) {
-    char buf[1024];
-    memset(buf, 0xFF, sizeof(buf));
+#endif
+#if USE_MTD
+    char dest[16384];
+    memset(dest, 0xFF, sizeof(dest));
+    uint64_t to_write = volume_size_ - nr_written_;
+    if( to_write%16384 != 0)
+      LOG(INFO) << "UbiFileDescriptor::Close need handling writing for left over bytes: ";
+    int iter = to_write/16384;
+    ssize_t pad_bytes = 0;
+    for (int i = 0; i < iter; i++){
+      int ret = telaf_ubi_write (dest, 16384);
+      if(ret == 0) {
+        LOG(INFO) << "UbiFileDescriptor::Close Write pad bytes ok";
+        pad_bytes += 16384;
+      }else {
+        LOG(ERROR) << "UbiFileDescriptor::Close Write pad bytes error";
+      }
+    }
+    if ((nr_written_ + pad_bytes) == volume_size_)
+        LOG(INFO) << "UbiFileDescriptor::Close all bytes written, close can be called";
+    else {
+        LOG(ERROR) << "UbiFileDescriptor::Close pad bytes: " << pad_bytes;
+        LOG(ERROR) << "UbiFileDescriptor::Close nr_written_: " << nr_written_;
+        LOG(ERROR) << "UbiFileDescriptor::Close volume_size_: " << volume_size_;
+        nr_written_ += pad_bytes;
+        to_write = volume_size_ - nr_written_; 
+        int ret = telaf_ubi_write (dest, 16384);
+        if(ret == 0) {
+          LOG(INFO) << "UbiFileDescriptor::Close Write pad bytes ok";
+          pad_bytes += 16384;
+        }else {
+          LOG(ERROR) << "UbiFileDescriptor::Close Write pad bytes error";
+        }
+    }
+
+#else
     while (nr_written_ < volume_size_) {
       // We have written less than the whole volume. In order for us to clear
       // the update marker, we need to fill the rest. It is recommended to fill
       // UBI writes with 0xFF.
-      uint64_t to_write = volume_size_ - nr_written_;
       if (to_write > sizeof(buf)) {
         to_write = sizeof(buf);
       }
-      ssize_t nr_chunk = EintrSafeFileDescriptor::Write(buf, to_write);
+      ssize_t nr_chunk;
+      nr_chunk = EintrSafeFileDescriptor::Write(buf, to_write);
       if (nr_chunk < 0) {
-        LOG(ERROR) << "Cannot 0xFF-pad before closing.";
+        //LOG(ERROR) << "Cannot 0xFF-pad before closing.";
         // There is an error, but we can't really do any meaningful thing here.
         pad_ok = false;
         break;
       }
       nr_written_ += nr_chunk;
     }
+#endif
   }
+#if !USE_MTD
   return EintrSafeFileDescriptor::Close() && pad_ok;
+#else
+  telaf_ubi_close();
+  LOG(INFO) << "UbiFileDescriptor::Close ,  pad_ok" << pad_ok;
+  return pad_ok;
+#endif
 }
+
+#if USE_MTD
+int MtdFileDescriptor::GetMtdno (const char* parti_name, char* mtdno)
+{
+    FILE *fp;
+    char *line = NULL;
+    size_t len = 0;
+    ssize_t nread;
+    char* val;
+    char* saveptr = NULL;
+    char part_no[10]={0};
+    int part_found  = 0;
+
+    if (NULL == parti_name || NULL == mtdno)
+    {
+      return -1;
+    }
+
+    /* Open text file for reading with position at beginning of file */
+    fp = fopen("/proc/mtd", "r");
+
+    if (fp == NULL) {
+      //LOG(ERROR) << "Failed to open /proc/mtd";
+      return -1;
+    }
+
+    /* Recursively read each line till we reach the end of file */
+    while ((nread = getline(&line, &len, fp)) != -1) {
+
+        /* Tokenize the string to parse each line*/
+        val = strtok_r(line, " :\"", &saveptr);
+        memset(part_no, 0, sizeof(part_no));
+
+        if (val!=NULL)
+            strlcpy(part_no, val, strlen(val)+1);
+
+        while (val!=NULL){
+          if (!strncmp(val,parti_name,strlen(parti_name))) {
+            strlcpy(mtdno,part_no,strlen(part_no)+1);
+            part_found = 1;
+            goto out;
+          }
+          val=strtok_r(NULL, " :\"", &saveptr);
+        }
+      }
+      out:
+      {
+        free(line);
+        fclose(fp);
+      }
+    if(part_found == 0)
+    {
+        LOG(ERROR) << "Failed to get partition num for " << parti_name;
+        return -1;
+    }
+    return 0;
+}
+
+int UbiFileDescriptor::GetVolIdByName(const char *volname, int *ubi_id, int *vol_id)
+{
+    int i, j, ret;
+    int ubinode, volcount[MAX_VOL_COUNT];
+
+    if (volname == NULL) return -1;
+
+    ubinode = UbiFileDescriptor::GetVolCount(volcount);
+
+    for (i = 0; i < ubinode; i++) {
+        for (j = 0; j < volcount[i]; j++) {
+            char name[MAX_NAME_LEN];
+            memset(name, 0, sizeof(name));
+            ret = UbiFileDescriptor::GetVolName(i, j, name);
+            if (ret != 0) continue;
+            if (strcmp(name, volname) == 0) {
+                *ubi_id = i;
+                *vol_id = j;
+                return 0;
+            }
+        }
+    }
+    LOG(WARNING) << " no ubi volume id found by name " << volname;
+    return -1;
+}
+
+int UbiFileDescriptor::GetVolName(int ubi_id, int vol_id, char *volname)
+{
+    int ret;
+    char path[64];
+
+    if (ubi_id < 0 || vol_id < 0 || volname == NULL) return -1;
+
+    memset(path, 0, sizeof(path));
+    snprintf(path, sizeof(path)-1, SYS_CLASS_UBI_VOL_NAME_PATH, ubi_id, vol_id);
+    ret = UbiFileDescriptor::GetStringFromFile(path, volname);
+    if (ret < 0) return -1;
+
+    return 0;
+}
+
+int UbiFileDescriptor::GetVolCount(int volcount[])
+{
+    int ubinode = 0;
+
+    do {
+        char path[64];
+        int value;
+        memset(path, 0, sizeof(path));
+        snprintf(path, sizeof(path)-1, SYS_CLASS_UBI_VOL_COUNT_PATH, ubinode);
+        value = UbiFileDescriptor::GetValueFromFile(path);
+        if (value != -1) {
+            volcount[ubinode++] = value;
+        }
+        else
+             break;
+    } while (1);
+
+    return ubinode;
+}
+
+
+int UbiFileDescriptor::GetStringFromFile(const char *path, char *data)
+{
+    int rc;
+    FILE *fp;
+
+    if (path == NULL || data == NULL)
+            return -1;
+    fp = fopen(path, "r");
+    if (fp == NULL) return -1;
+    rc = fscanf(fp, "%s\n", data);
+    MRC_UNUSED(rc);
+    fclose(fp);
+    return 0;
+}
+
+int UbiFileDescriptor::GetValueFromFile(const char *path)
+{
+    int value = 0, rc;
+    FILE *fp;
+
+    if (path == NULL) return -1;
+    fp = fopen(path, "r");
+    if (fp == NULL) return -1;
+    rc = fscanf(fp, "%d\n", &value);
+    MRC_UNUSED(rc);
+    fclose(fp);
+    return value;
+}
+#endif
 
 }  // namespace chromeos_update_engine

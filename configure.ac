@@ -126,6 +126,22 @@ AC_ARG_WITH([core-headers],
       [CPPFLAGS="$CPPFLAGS -I$withval"],
       with_core-headers=no)
 
+AC_ARG_WITH(telaf-headers,
+         AS_HELP_STRING([--with-telaf-headers=DIR],
+                 [Specify the location of the generate telaf headers]),
+         [CPPFLAGS="$CPPFLAGS -I$withval"])
+
+AC_ARG_WITH(telafconfig-headers,
+         AS_HELP_STRING([--with-telafconfig-headers=DIR],
+                 [Specify the location of the generate telafconfig headers]),
+         [CPPFLAGS="$CPPFLAGS -I$withval"])
+
+AC_ARG_WITH([nand-boot],
+      AC_HELP_STRING([--with-nand_boot],
+         [enable nand_boot, Use this for NAND OTA]), with_nand_boot=true)
+# Compile nand ab ota code for targets supporting it
+AM_CONDITIONAL([TARGET_NAND_BOOT],[test "x${with_nand_boot}" = "xtrue"])
+
 AC_SUBST(CFLAGS)
 AC_CONFIG_FILES([     \
         Makefile      \
