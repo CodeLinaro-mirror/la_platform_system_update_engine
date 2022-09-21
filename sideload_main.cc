@@ -327,6 +327,8 @@ int main(int argc, char** argv) {
            LOG(INFO) << "\n" << metadata;
            payload_header.push_back(metadata);
         }
+        sp<android::ProcessState> proc(android::ProcessState::self());
+        android::ProcessState::self()->startThreadPool();
         std::string::size_type strtype;
         std::string size = payload_header[1].substr(10, 8);
         payload_size = std::stoi( size,&strtype ); // "The size of the CrAU part of the payload. If 0 is passed, it "
@@ -337,7 +339,17 @@ int main(int argc, char** argv) {
         }
         sp<IStreamUpdateService> stream_update_service = getStreamUpdateService();
         LOG(INFO) << "Client init ";
+
+        sp<UpdateNotifyService> callback(new UpdateNotifyService);
+        sp<IBinder> binder(callback.get());
+        stream_update_service->registerCallback(binder);
+
         stream_update_service->applyUpdatePayload(FLAGS_payload, payload_offset, payload_size, payload_header, update_status_fd);
+        {
+        Mutex::Autolock _l(callback->mNotifyLock);
+        LOG(INFO) << "wait for call to be executed ";
+        callback->mNotifyCond.wait(callback->mNotifyLock);
+        }
         LOG(INFO) << "exit from client";
     }
 #endif

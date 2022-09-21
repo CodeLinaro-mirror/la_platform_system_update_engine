@@ -78,8 +78,19 @@ class BpStreamUpdateService : public BpInterface <IStreamUpdateService> {
               data.writeCString(headers[i].c_str());
             }
             remote()->transact(APPLYPAYLOAD, data, &reply, IBinder::FLAG_ONEWAY);    // asynchronous call
+
             return;
         }
+
+        virtual void registerCallback(sp<IBinder> &binder)
+        {
+          Parcel data, reply;
+          data.writeInterfaceToken(IStreamUpdateService::getInterfaceDescriptor());
+          data.writeStrongBinder(binder);
+          remote()->transact(TRANSACTION_REGISTER_CALLBACK, data, &reply,IBinder::FLAG_ONEWAY);
+          return;
+        }
+
 };
 
 class StreamUpdateService : public BnStreamUpdateService {
@@ -93,6 +104,15 @@ class StreamUpdateService : public BnStreamUpdateService {
        LOG(INFO) << "\n Update_engine_client payload statusfd: " << status_fd;
        return;
     }
+    virtual void registerCallback(sp<IBinder> &binder)
+    {
+      Mutex::Autolock _l(mLock);
+      sp<IStreamUpdateNotifyService> callback = interface_cast<IStreamUpdateNotifyService>(binder);
+      mCallbacks.push(callback);
+      LOG(INFO) << "Service does registerCallback ";
+      return;
+    }
+
 };
 IMPLEMENT_META_INTERFACE(StreamUpdateService, "StreamUpdateService");
 
@@ -100,6 +120,7 @@ IMPLEMENT_META_INTERFACE(StreamUpdateService, "StreamUpdateService");
 /* implementation of interface exposed by binder IStreamUpdateService interface service side (ontrasact function) */
 status_t BnStreamUpdateService::onTransact(
     uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags){
+    LOG(INFO) << "inside BnStreamUpdateService::onTransact code="<<code<<"\n";
     data.checkInterface(this);
     switch(code) {
         case APPLYPAYLOAD: {
@@ -134,7 +155,22 @@ status_t BnStreamUpdateService::onTransact(
             payload_obj->ApplyUpdatePayload(
                str, payload_offset, payload_size, header_init, update_status_fd);
             LOG(INFO) << "\n  applypayload done ";
+      
+            for (int i = mCallbacks.size() - 1; i >= 0; i--)
+            {
+              LOG(INFO) << " execute callback ";
+              sp<IStreamUpdateNotifyService> cb = mCallbacks[i];
+              cb->triggerNotify();
+              mCallbacks.removeAt(i);
+            }
             return NO_ERROR;
+        } break;
+        case TRANSACTION_REGISTER_CALLBACK :
+        {
+          LOG(INFO) << " TRANSACTION_REGISTER_CALLBACK read binder object ";
+          sp<IBinder> service = data.readStrongBinder();
+          registerCallback(service);
+          return NO_ERROR;
         } break;
         default:
             return BBinder::onTransact(code, data, reply, flags);
@@ -143,6 +179,57 @@ status_t BnStreamUpdateService::onTransact(
 };
 
 
+class BpStreamUpdateNotifyService: public BpInterface<IStreamUpdateNotifyService>
+{
+public:
+    BpStreamUpdateNotifyService(const sp<IBinder>& impl)
+        : BpInterface<IStreamUpdateNotifyService>(impl)
+    {
+    }
+
+    virtual void triggerNotify()
+    {
+        Parcel data, reply;
+        data.writeInterfaceToken(IStreamUpdateNotifyService::getInterfaceDescriptor());
+        remote()->transact(BnStreamUpdateNotifyService::TRANSACTION_NOTIFY, data, &reply);
+        return;
+    }
+};
+
+IMPLEMENT_META_INTERFACE(StreamUpdateNotifyService, "StreamUpdateNotifyService");
+
+status_t BnStreamUpdateNotifyService::onTransact(
+    uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags)
+{
+    switch(code) {
+        case TRANSACTION_NOTIFY: {
+            CHECK_INTERFACE(IStreamUpdateNotifyService, data, reply);
+            triggerNotify();
+            return NO_ERROR;
+        }
+        default: {
+            return BBinder::onTransact(code, data, reply, flags);
+        }
+    }
+    return NO_ERROR;
+}
+
+
+UpdateNotifyService::UpdateNotifyService()
+{
+}
+
+UpdateNotifyService::~UpdateNotifyService()
+{
+}
+
+void UpdateNotifyService::triggerNotify()
+{
+    LOG(INFO) << " UpdateNotifyService:: triggered  ";
+    Mutex::Autolock _l(mNotifyLock);
+    mNotifyCond.signal();
+    LOG(INFO) << "UpdateNotifyService:: notification sent ";
+}
 };
 
 

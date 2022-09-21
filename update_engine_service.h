@@ -39,6 +39,8 @@
 #include <binder/IServiceManager.h>
 #include <binder/IPCThreadState.h>
 #include <base/logging.h>
+#include <utils/Condition.h>
+#include <utils/Mutex.h>
 
 using std::string;
 using std::vector;
@@ -48,6 +50,35 @@ using namespace android;
 namespace android {
 
 
+class IStreamUpdateNotifyService: public IInterface {
+public:
+    DECLARE_META_INTERFACE(StreamUpdateNotifyService);
+
+    virtual void triggerNotify() = 0;
+};
+
+class BnStreamUpdateNotifyService: public BnInterface<IStreamUpdateNotifyService> {
+public:
+    enum {
+        TRANSACTION_NOTIFY = IBinder::FIRST_CALL_TRANSACTION + 3,
+    };
+
+    virtual status_t onTransact(uint32_t code, const Parcel& data,
+            Parcel* reply, uint32_t flag = 0);
+};
+
+class UpdateNotifyService: public BnStreamUpdateNotifyService
+{
+public:
+    UpdateNotifyService();
+    ~UpdateNotifyService();
+    virtual void triggerNotify();
+    mutable Condition mNotifyCond;
+    mutable Mutex mNotifyLock;
+};
+
+
+
 class IStreamUpdateService : public IInterface {
   public:
     virtual void applyUpdatePayload(const string& payload,
@@ -55,12 +86,18 @@ class IStreamUpdateService : public IInterface {
                         int64_t payload_size,
                         const vector<string>& headers,
                         int64_t status_fd) = 0;
+    virtual void registerCallback(sp<IBinder>& binder) = 0;
     enum {
         APPLYPAYLOAD = IBinder::FIRST_CALL_TRANSACTION,
+        TRANSACTION_REGISTER_CALLBACK = IBinder::FIRST_CALL_TRANSACTION + 1 ,
     };
+
+
     DECLARE_META_INTERFACE(StreamUpdateService);
     pthread_mutex_t m_serverWaitMutex;
     pthread_cond_t m_serverWaitCond;
+    mutable Mutex mLock;
+    Vector<sp<IStreamUpdateNotifyService>>  mCallbacks;
 };
 
 class BnStreamUpdateService : public BnInterface <IStreamUpdateService> {
@@ -69,6 +106,8 @@ class BnStreamUpdateService : public BnInterface <IStreamUpdateService> {
                                     const Parcel& data,
                                     Parcel* reply,
                                     uint32_t flags = 0);
+
+    Vector<sp<IStreamUpdateNotifyService>> mCallbacks;
 };
 
 };
