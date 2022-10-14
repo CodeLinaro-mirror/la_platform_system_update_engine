@@ -17,8 +17,11 @@
 #ifndef UPDATE_ENGINE_PAYLOAD_CONSUMER_XZ_EXTENT_WRITER_H_
 #define UPDATE_ENGINE_PAYLOAD_CONSUMER_XZ_EXTENT_WRITER_H_
 
+#ifdef BUILD_HOST
+#include <linux/xz.h>
+#else
 #include <xz.h>
-
+#endif
 #include <memory>
 #include <vector>
 

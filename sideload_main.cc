@@ -48,7 +48,7 @@
 // IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 
-#include <xz.h>
+#include <linux/xz.h>
 
 #include <string>
 #include <vector>

@@ -63,8 +63,6 @@
 #include <mtdutils/mounts.h>
 #include <mtdutils/mtdutils.h>
 #include "libabctl.h"
-#define BOOT_NAME_LENGTH 7
-#define ROOTFS_NAME_LENGTH 10
 #define MAX_SLOTS (2)
 #endif
 using std::string;
@@ -195,12 +193,8 @@ bool BootControlRecovery::GetPartitionDevice(const string& partition_name,
     return false;
   }
 
-#ifndef USE_LE_MODE
   const char* suffix = module_->getSuffix(module_, slot);
   LOG(INFO) << "boot_control current slot suffix  " << suffix;
-#else
-  const char* suffix = "_b";//module_->getSuffix(module_, slot);
-#endif
   if (suffix == nullptr) {
     LOG(ERROR) << "boot_control impl returned no suffix for slot "
                << SlotName(slot);
@@ -224,26 +218,13 @@ bool BootControlRecovery::GetPartitionDevice(const string& partition_name,
   LOG(INFO) << "boot_control current active slot  " << chromeos_update_engine::boot_control::boot_slot;
   // Set the inactive slot to the non-boot slot (1->0, 0->1)
   chromeos_update_engine::boot_control::inactive_slot = (chromeos_update_engine::boot_control::boot_slot + 1)%2;
-  //chromeos_update_engine::boot_control::inactive_slot = chromeos_update_engine::boot_control::boot_slot;
   LOG(INFO) << "boot_control current inactive slot  " << chromeos_update_engine::boot_control::inactive_slot;
-  printf("boot_slot = %s, inactive_slot = %s\n", chromeos_update_engine::boot_control::slot_suffix_arr[chromeos_update_engine::boot_control::boot_slot],
-          chromeos_update_engine::boot_control::slot_suffix_arr[chromeos_update_engine::boot_control::inactive_slot]);
   char *inactive_mtd_block;
-  if(partition_name == "system"){
-  char inactive_rootfs_volume[ROOTFS_NAME_LENGTH];
-  //snprintf(inactive_rootfs_volume, ROOTFS_NAME_LENGTH, "%s%s", "rootfs",
-  //    chromeos_update_engine::boot_control::slot_suffix_arr[chromeos_update_engine::boot_control::inactive_slot]);
-  snprintf(inactive_rootfs_volume, ROOTFS_NAME_LENGTH, "%s%s", "system",
+  char inactive_partition[PATH_MAX];
+  snprintf(inactive_partition, sizeof(inactive_partition), "%s%s", partition_name.c_str(),
       chromeos_update_engine::boot_control::slot_suffix_arr[chromeos_update_engine::boot_control::inactive_slot]);
-  inactive_mtd_block = BootControlRecovery::getMtdBlock(inactive_rootfs_volume);
-  printf("\n boot_control inactive_rootfs_volume  %s\n",inactive_rootfs_volume);
-  } else if(partition_name == "boot"){
-    char inactive_boot_partition[BOOT_NAME_LENGTH];
-    snprintf(inactive_boot_partition, BOOT_NAME_LENGTH, "%s%s", "boot",
-      chromeos_update_engine::boot_control::slot_suffix_arr[chromeos_update_engine::boot_control::inactive_slot]);
-    inactive_mtd_block = getMtdBlock(inactive_boot_partition);
-  }
-  printf("\n boot_control %s\n",inactive_mtd_block);
+  LOG(INFO) << " boot_control inactive_partition  " << inactive_partition;
+  inactive_mtd_block = BootControlRecovery::getMtdBlock(inactive_partition);
   LOG(INFO) << "boot_control inactive_mtd_block: " << inactive_mtd_block;
   std::string str;
   str.assign(inactive_mtd_block);
