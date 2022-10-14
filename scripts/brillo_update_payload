@@ -368,7 +368,7 @@ extract_image_brillo() {
   local partitions_array="$2"
   local partitions_order="${3:-}"
 
-  local partitions=( "boot" "system" )
+  local partitions=( "boot" "system" "telaf")
   local ab_partitions_list
   ab_partitions_list=$(create_tempfile "ab_partitions_list.XXXXXX")
   CLEANUP_FILES+=("${ab_partitions_list}")
@@ -379,6 +379,17 @@ extract_image_brillo() {
     partitions=($(cat "${ab_partitions_list}"))
     if [[ ${#partitions[@]} -eq 0 ]]; then
       die "The list of partitions is empty. Can't generate a payload."
+    fi
+  elif unzip -p "${image}" "RADIO/filesmap" >"${ab_partitions_list}"; then
+    sed -i '/#/d;s/\S*\(\.\|*\)\S*//g;/\//d;/^$/d;s/[[:blank:]]//g' ${ab_partitions_list}
+    sed -i '/sbl/d;/modem/d;/sec/d;/apdp/d' ${ab_partitions_list}
+    echo "$(awk '!_[$0]++' ${ab_partitions_list})" > ${ab_partitions_list}
+    if grep -v -E '^[a-zA-Z0-9_-]*$' "${ab_partitions_list}" >&2; then
+      die "Invalid partition names found in the partition list."
+    fi
+    partitions += ($(cat "${ab_partitions_list}"))
+    if [[ ${#partitions[@]} -eq 0 ]]; then
+    die "The list of partitions is empty. Can't generate a payload."
     fi
   else
     warn "No ab_partitions.txt found. Using default."
