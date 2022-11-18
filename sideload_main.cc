@@ -95,6 +95,12 @@
 #include <glib.h>
 #endif
 
+#if USE_MTD
+extern "C" {
+#include "telaf-flash-access.h"
+}
+#endif
+
 using std::string;
 using std::vector;
 using update_engine::UpdateStatus;
@@ -315,6 +321,7 @@ int main(int argc, char** argv) {
 #else
 
     if (argc == 1) {
+        telaf_connect_to_flash_access();
         stream_update_service_init();
     } else {
         std::ifstream payload_prop;

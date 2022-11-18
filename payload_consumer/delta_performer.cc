@@ -57,6 +57,7 @@
 
 #if USE_MTD
 #define DEV_UBI_NODE                    "/dev/ubi%d_%d"
+#define MTD_NAD_UBI                     37   // find alterative method to remove dependency of nad_ubi
 #endif
 
 using google::protobuf::RepeatedPtrField;
@@ -102,7 +103,7 @@ FileDescriptorPtr CreateFileDescriptor(const char* path) {
   char ubi_path[64];
   LOG(INFO) << " CreateFileDescriptor check device type first,  mtdno " << mtd_no;
   string ubi_str(mtd_no); 
-  if (stoi(ubi_str.substr(8, 2)) > 35){
+  if (stoi(ubi_str.substr(8, 2)) > MTD_NAD_UBI){
     LOG(INFO) << " CreateFileDescriptor ubi device get ubi node " ;
     ret.reset(new UbiFileDescriptor);
   } else {
@@ -139,7 +140,7 @@ FileDescriptorPtr OpenFile(const char* path, int mode, int* err) {
     memcpy(dev_node, mtd_no, sizeof(mtd_no));
     snprintf(ubi_path, sizeof(ubi_path)-1, DEV_UBI_NODE, uid, vid);
     string ubi_str(mtd_no);
-    if (stoi(ubi_str.substr(8, 2)) > 35){
+    if (stoi(ubi_str.substr(8, 2)) > MTD_NAD_UBI){
       err = UbiFileDescriptor::GetVolIdByName(path, &uid, &vid);
       if (err < 0) {
         LOG(ERROR) << " CreateFileDescriptor get ubi id error ";

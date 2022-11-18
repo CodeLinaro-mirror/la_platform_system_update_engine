@@ -151,7 +151,7 @@ bool MtdFileDescriptor::Open(const char* path, int flags, mode_t mode) {
 #if !USE_MTD
     write_ctx_.reset(mtd_write_descriptor(fd_, path));
 #else
-    telaf_connect_to_flash_access();
+    //telaf_connect_to_flash_access();
     ret = telaf_mtd_open (path);
     if (ret != 0){
        LOG(ERROR) << " MtdFileDescriptor open failed ";
@@ -378,7 +378,7 @@ ssize_t UbiFileDescriptor::Write(const void* buf, size_t count) {
   char dest[16384];
   char *source = reinterpret_cast<char*>(const_cast<void*>(buf));
   for (int i=0 ; i < iter ; i++) {
-    LOG(INFO) << "UbiFileDescriptor::Write iter: " << iter;
+    LOG(INFO) << "UbiFileDescriptor::Write iter: " << i;
     memset(dest, 0, sizeof(dest));
     memcpy(dest, source + i*16384, 16384);
     int ret =  telaf_ubi_write (dest, 16384);
@@ -389,10 +389,21 @@ ssize_t UbiFileDescriptor::Write(const void* buf, size_t count) {
       LOG(INFO) << "UbiFileDescriptor::Write  ok";
     }
   }
-  if(count%16384)
-    LOG(INFO) << "UbiFileDescriptor::Write  count/16384 is 0";
-  else {
-    LOG(ERROR) << "UbiFileDescriptor::Write  count/16384 is not 0";
+  if(count%16384){
+    // in this case we have some more data present , we need to write one more cycle for extra data
+    LOG(INFO) << "UbiFileDescriptor::Write  count is not multiple of 16384 addition write cycle added " << iter;
+    memset(dest, 0, sizeof(dest));
+    memcpy(dest, source + iter*16384, 16384);
+    int ret =  telaf_ubi_write (dest, 16384);
+    if(ret != 0) {
+      LOG(ERROR) << "UbiFileDescriptor::Write  error";
+      return -1;
+    } else {
+      LOG(INFO) << "UbiFileDescriptor::Write  ok";
+    }
+
+  } else {
+    LOG(ERROR) << "UbiFileDescriptor::Write  count is multiple of 16384 ";
   }
  
   nr_chunk = count;
@@ -429,13 +440,14 @@ bool UbiFileDescriptor::Close() {
     if( to_write%16384 != 0)
       LOG(INFO) << "UbiFileDescriptor::Close need handling writing for left over bytes: ";
     int iter = to_write/16384;
+    LOG(INFO) << "UbiFileDescriptor::Close need : " << to_write << " more bytes to write";
     ssize_t pad_bytes = 0;
     for (int i = 0; i < iter; i++){
       int ret = telaf_ubi_write (dest, 16384);
       if(ret == 0) {
         LOG(INFO) << "UbiFileDescriptor::Close Write pad bytes ok";
         pad_bytes += 16384;
-      }else {
+      } else {
         LOG(ERROR) << "UbiFileDescriptor::Close Write pad bytes error";
       }
     }
