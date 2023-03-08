@@ -394,7 +394,7 @@ ssize_t UbiFileDescriptor::Write(const void* buf, size_t count) {
     LOG(INFO) << "UbiFileDescriptor::Write  count is not multiple of 16384 addition write cycle added " << iter;
     memset(dest, 0, sizeof(dest));
     memcpy(dest, source + iter*16384, 16384);
-    int ret =  telaf_ubi_write (dest, 16384);
+    int ret =  telaf_ubi_write (dest, count - iter*16384);
     if(ret != 0) {
       LOG(ERROR) << "UbiFileDescriptor::Write  error";
       return -1;
