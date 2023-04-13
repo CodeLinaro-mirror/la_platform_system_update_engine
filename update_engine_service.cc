@@ -127,12 +127,32 @@ status_t BnStreamUpdateService::onTransact(
             LOG(INFO) << " APPLYPAYLOAD";
             String16 payload(data.readString16());
             const char* payload_2(data.readCString());
+            if( payload_2 == NULL) {
+              printf("Error couldnot allocate for payload_2\n");
+              return NULL;
+            }
             int64_t payload_offset = data.readInt64();
             int64_t payload_size = data.readInt64();
             const char* payload_file_hash(data.readCString());
+            if( payload_file_hash == NULL ) {
+              printf("Error couldnot allocate for payload_file_hash\n");
+              return NULL;
+            }
             const char* payload_file_size(data.readCString());
+            if( payload_file_size == NULL ) {
+              printf("Error couldnot allocate for payload_file_size\n");
+              return NULL;
+            }
             const char* payload_metadata_hash(data.readCString());
+            if( payload_metadata_hash == NULL ) {
+              printf("Error couldnot allocate for payload_metadata_hash\n");
+              return NULL;
+            }
             const char* payload_metadata_size(data.readCString());
+            if( payload_metadata_size == NULL ) {
+              printf("Error couldnot allocate for payload_metadata_size\n");
+              return NULL;
+            }
             int64_t update_status_fd(-1);
             LOG(INFO) << " APPLYPAYLOAD payload url " << payload_2;
             LOG(INFO) << " payload_file_hash " << payload_file_hash;
@@ -236,6 +256,10 @@ void UpdateNotifyService::triggerNotify()
 void stream_update_service_init() {
     defaultServiceManager()->addService(String16("StreamUpdateService"), new StreamUpdateService());
     android::ProcessState::self()->startThreadPool();
+    if (IPCThreadState::self() == NULL) {
+       printf("Error in self() call\n");
+       return;
+    }
     LOG(INFO) << "StreamUpdateService service is added";
     IPCThreadState::self()->joinThreadPool();
     LOG(INFO) << "StreamUpdateService service thread joined";

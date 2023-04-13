@@ -179,6 +179,11 @@ bool MtdFileDescriptor::Open(const char* path, int flags, mode_t mode) {
 #else
   mtd_info_t *mtd_info;
   mtd_info = (mtd_info_t *) malloc(sizeof(mtd_info_t));
+  if( mtd_info == NULL ) {
+    printf("memory allocationed failed \n");
+    return false;
+  }
+
 
   ret = telaf_mtd_information(mtd_info);
   if (ret != 0){

@@ -345,6 +345,10 @@ int main(int argc, char** argv) {
           LOG(INFO) << " update_engine_client headers strings split :" << payload_header[i];
         }
         sp<IStreamUpdateService> stream_update_service = getStreamUpdateService();
+        if (stream_update_service == NULL) {
+          LOG(INFO) << "Client init Fail";
+          return -1;
+        }
         LOG(INFO) << "Client init ";
 
         sp<UpdateNotifyService> callback(new UpdateNotifyService);
