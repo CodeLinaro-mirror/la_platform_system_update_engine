@@ -62,7 +62,7 @@
 #ifdef USE_LE_MODE
 #include <mtdutils/mounts.h>
 #include <mtdutils/mtdutils.h>
-#include "libabctl.h"
+#include "nad-ab-al.h"
 #define MAX_SLOTS (2)
 #endif
 using std::string;
@@ -149,13 +149,13 @@ BootControlInterface::Slot BootControlRecovery::GetCurrentSlot() const {
 #ifndef USE_LE_MODE
   return module_->getCurrentSlot(module_);
 #else
-  int current_slot = libabctl_getBootSlot();
+  int current_slot = libnadab_get_boot_slot();
   if(current_slot == 0){
-    LOG(INFO) << " current MTD slto is _a";  
+    LOG(INFO) << " current MTD slot is _a";
     return 0;
   }
   else if(current_slot == 1){
-    LOG(INFO) << " current MTD slto is _b";  
+    LOG(INFO) << " current MTD slot is _b";
     return 1;
   }else{
     LOG(INFO) << " device doesnt support DUAL PARTITION";
@@ -214,9 +214,9 @@ bool BootControlRecovery::GetPartitionDevice(const string& partition_name,
   *device = path.value();
 #endif
   LOG(INFO) << "boot_control slot partition_name: " << partition_name;
-  chromeos_update_engine::boot_control::boot_slot = libabctl_getBootSlot();
+  chromeos_update_engine::boot_control::boot_slot = libnadab_get_boot_slot();
   if (chromeos_update_engine::boot_control::boot_slot == -1) {
-      printf(" libabctl error aborting!\n");
+      printf(" libnadab error aborting!\n");
      return false;
   }
   // Set the inactive slot to the non-boot slot (1->0, 0->1)
@@ -225,8 +225,19 @@ bool BootControlRecovery::GetPartitionDevice(const string& partition_name,
   char *inactive_mtd_block;
   char inactive_partition[PATH_MAX];
   std::string str;
-  snprintf(inactive_partition, sizeof(inactive_partition), "%s%s", partition_name.c_str(),
-      chromeos_update_engine::boot_control::slot_suffix_arr[chromeos_update_engine::boot_control::inactive_slot]);
+  LOG(INFO) << "boot_control partition_name:  " << partition_name.c_str();
+  if ( (partition_name == "rootfs") || (partition_name == "telaf") || (partition_name == "firmware") || (partition_name == "vm-bootsys") ){
+      snprintf(inactive_partition, sizeof(inactive_partition), "%s%s", partition_name.c_str(),
+          chromeos_update_engine::boot_control::slot_suffix_arr[chromeos_update_engine::boot_control::inactive_slot]);
+      LOG(INFO) << "boot_control partition_name for volumes:  " << inactive_partition;
+  } else {
+      if(chromeos_update_engine::boot_control::boot_slot == 0)
+          snprintf(inactive_partition, sizeof(inactive_partition), "%s%s", partition_name.c_str(),
+              chromeos_update_engine::boot_control::slot_suffix_arr[1]);
+      else
+          snprintf(inactive_partition, sizeof(inactive_partition), "%s", partition_name.c_str());
+      LOG(INFO) << "boot_control partition_name for non volumes:  " << inactive_partition;
+  }
 #ifdef FLASH_ACCESS
   str.assign(inactive_partition);
 #else
@@ -280,7 +291,7 @@ bool BootControlRecovery::MarkSlotUnbootable(Slot slot) {
   return ret == 0;
 #else
   LOG(INFO) << "MarkSlotUnbootable  " << SlotName(slot);
-  int ret = libabctl_setUnbootable(slot);
+  int ret = libnadab_set_unbootable(slot);
   if(ret == 0) {
     return true;
   } else {
@@ -299,14 +310,14 @@ bool BootControlRecovery::SetActiveBootSlot(Slot slot) {
   return ret == 0;
 #else
   LOG(INFO) << "SetActiveBootSlot   " << SlotName(slot);
-  int ret = libabctl_setActive(slot);
+  int ret = libnadab_set_active(slot);
   if(ret == 0) {
     LOG(INFO) << "SetActiveBootSlot  " << SlotName(slot) << " is success";
     return true;
   } else {
     LOG(INFO) << "SetActiveBootSlot  " << SlotName(slot) << " failed";
     return false;
-  }	
+  }
 #endif
 }
 
@@ -321,12 +332,7 @@ bool BootControlRecovery::MarkBootSuccessfulAsync(
              FROM_HERE, base::Bind(callback, ret == 0)) !=
          brillo::MessageLoop::kTaskIdNull;
 #else
-  LOG(INFO) << "MarkBootSuccessfulAsync   ";
-  int ret = libabctl_SetBootSuccess();
-  if (ret != 0) {	  
-    LOG(ERROR) << "Unable to call MarkBootSuccessful: ";
-    return false;
-  }
+  LOG(INFO) << "MarkBootSuccessfulAsync";
   return true;
 #endif
 }
