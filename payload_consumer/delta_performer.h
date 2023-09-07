@@ -35,6 +35,12 @@
 #include "update_engine/payload_consumer/install_plan.h"
 #include "update_engine/update_metadata.pb.h"
 
+#if USE_MTD
+extern "C" {
+#include "telaf-flash-access.h"
+}
+#endif
+
 namespace chromeos_update_engine {
 
 class DownloadActionDelegate;

@@ -57,7 +57,7 @@
 
 #if USE_MTD
 #define DEV_UBI_NODE                    "/dev/ubi%d_%d"
-#define MTD_NAD_UBI                     37   // find alterative method to remove dependency of nad_ubi
+#define SYSTEM_UBI_MTD_NUM              "/sys/class/ubi/ubi0/mtd_num"
 #endif
 
 using google::protobuf::RepeatedPtrField;
@@ -102,8 +102,17 @@ FileDescriptorPtr CreateFileDescriptor(const char* path) {
   }
   char ubi_path[64];
   LOG(INFO) << " CreateFileDescriptor check device type first,  mtdno " << mtd_no;
-  string ubi_str(mtd_no); 
-  if (stoi(ubi_str.substr(8, 2)) > MTD_NAD_UBI){
+
+  int mtd_system_ubi =  get_value_from_file(SYSTEM_UBI_MTD_NUM);
+  if (mtd_system_ubi == -1) {
+    LOG(INFO) << " failed to get mtd no for system ubi partition ";
+    ret.reset(new EintrSafeFileDescriptor);
+    return ret;
+  }
+  LOG(INFO) << " system ubi,  mtdno " << mtd_system_ubi;
+
+  string ubi_str(mtd_no);
+  if (stoi(ubi_str.substr(8, 2)) > mtd_system_ubi){
     LOG(INFO) << " CreateFileDescriptor ubi device get ubi node " ;
     ret.reset(new UbiFileDescriptor);
   } else {
@@ -139,8 +148,16 @@ FileDescriptorPtr OpenFile(const char* path, int mode, int* err) {
     LOG(INFO) << " CreateFileDescriptor check device type first,  mtdno " << mtd_no;
     memcpy(dev_node, mtd_no, sizeof(mtd_no));
     snprintf(ubi_path, sizeof(ubi_path)-1, DEV_UBI_NODE, uid, vid);
+
+    int mtd_system_ubi =  get_value_from_file(SYSTEM_UBI_MTD_NUM);
+    if (mtd_system_ubi == -1) {
+      LOG(INFO) << " failed to get mtd no for system ubi partition ";
+      return nullptr;
+    }
+    LOG(INFO) << " system ubi,  mtdno " << mtd_system_ubi;
+
     string ubi_str(mtd_no);
-    if (stoi(ubi_str.substr(8, 2)) > MTD_NAD_UBI){
+    if (stoi(ubi_str.substr(8, 2)) > mtd_system_ubi){
       err = UbiFileDescriptor::GetVolIdByName(path, &uid, &vid);
       if (err < 0) {
         LOG(ERROR) << " CreateFileDescriptor get ubi id error ";
