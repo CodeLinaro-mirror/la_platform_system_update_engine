@@ -91,12 +91,12 @@ libpayload_generator_la_SOURCES := \
 if USE_GLIB
 libpayload_generator_la_CFLAGS := $(AM_CFLAGS) -DUSE_GLIB @GLIB_CFLAGS@
 libpayload_generator_la_CPPFLAGS := $(AM_CPPFLAGS) -DUSE_GLIB @GLIB_CFLAGS@
-libpayload_generator_la_LIBADD := -lm -lpthread -levent -lprotobuf @GLIB_LIBS@
+libpayload_generator_la_LIBADD := -lm -lpthread -levent -lprotobuf-lite @GLIB_LIBS@
 libpayload_generator_la_LDFLAGS := -all-static
 else
 libpayload_generator_la_CFLAGS := $(AM_CFLAGS)
 libpayload_generator_la_CPPFLAGS := $(AM_CPPFLAGS)
-libpayload_generator_la_LIBADD := -lm -lpthread -levent -lprotobuf
+libpayload_generator_la_LIBADD := -lm -lpthread -levent -lprotobuf-lite
 libpayload_generator_la_LDFLAGS := -all-static
 endif
 
@@ -135,12 +135,12 @@ libpayload_consumer_la_SOURCES := \
 if USE_GLIB
 libpayload_consumer_la_CFLAGS := $(AM_CFLAGS) -DUSE_GLIB @GLIB_CFLAGS@
 libpayload_consumer_la_CPPFLAGS := $(AM_CPPFLAGS) -DUSE_GLIB @GLIB_CFLAGS@
-libpayload_consumer_la_LIBADD := -lm -lpthread -levent -lprotobuf -lbspatch ./libpayload_generator.la -lbrillo -lchrome -lxz @GLIB_LIBS@
+libpayload_consumer_la_LIBADD := -lm -lpthread -levent -lprotobuf-lite -lbspatch ./libpayload_generator.la -lbrillo -lchrome -lxz @GLIB_LIBS@
 libpayload_consumer_la_LDFLAGS := -all-static
 else
 libpayload_consumer_la_CFLAGS := $(AM_CFLAGS)
 libpayload_consumer_la_CPPFLAGS := $(AM_CPPFLAGS)
-libpayload_consumer_la_LIBADD := -lm -lpthread -levent  -lprotobuf -lbspatch -lxz
+libpayload_consumer_la_LIBADD := -lm -lpthread -levent  -lprotobuf-lite -lbspatch -lxz
 libpayload_consumer_la_LDFLAGS := -all-static
 endif
 
@@ -171,12 +171,12 @@ libupdate_engine_client_la_SOURCES := \
 if USE_GLIB
 libupdate_engine_client_la_CFLAGS := $(AM_CFLAGS) -DUSE_GLIB @GLIB_CFLAGS@
 libupdate_engine_client_la_CPPFLAGS := $(AM_CPPFLAGS) -DUSE_GLIB @GLIB_CFLAGS@
-libupdate_engine_client_la_LIBADD := -lm -lpthread -lprotobuf -lcurl -lmodpb64 -lbinderstreaming -lchrome -lbrillo -levent -lutils -lbspatch ./libpayload_consumer.la @GLIB_LIBS@
+libupdate_engine_client_la_LIBADD := -lm -lpthread -lprotobuf-lite -lcurl -lmodpb64 -lbinderstreaming -lchrome -lbrillo -levent -lutils -lbspatch ./libpayload_consumer.la @GLIB_LIBS@
 libupdate_engine_client_la_LDFLAGS := -all-static
 else
 libupdate_engine_client_la_CFLAGS := $(AM_CFLAGS)
 libupdate_engine_client_la_CPPFLAGS := $(AM_CPPFLAGS)
-libupdate_engine_client_la_LIBADD := -lm -lpthread -levent  -lprotobuf -lbspatch
+libupdate_engine_client_la_LIBADD := -lm -lpthread -levent  -lprotobuf-lite -lbspatch
 endif
 
 
@@ -194,7 +194,7 @@ requiredlibs := -lm \
                -lselinux \
                -lcutils \
                -llog \
-               -lprotobuf \
+               -lprotobuf-lite \
                ./libpayload_generator.la \
                ./libpayload_consumer.la \
                -lalzma \
@@ -211,7 +211,7 @@ delta_generator_requiredlibs := -lm \
                -lz \
                -lmincrypt \
                -lselinux \
-               -lprotobuf\
+               -lprotobuf-lite\
                ./libpayload_generator.la \
                ./libpayload_consumer.la \
                -lbspatch \
@@ -279,13 +279,13 @@ update_engine_sideload_requiredlibs := -lm \
                -lz \
                -lmincrypt \
                -lselinux \
-               -lbssl \
+               -lssl \
                -lbrillo \
                -lchrome \
                -lcutils \
                -levent \
                -llog \
-               -lprotobuf \
+               -lprotobuf-lite \
                ./libpayload_generator.la \
                ./libpayload_consumer.la \
                ./libupdate_engine_client.la \
