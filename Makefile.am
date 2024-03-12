@@ -57,6 +57,10 @@ AM_CPPFLAGS += $(LIBSELINUX_CFLAGS) \
               -D_ANDROID_
 endif
 
+if TELAF
+AM_CPPFLAGS += -DUSE_TELAF
+endif
+
 library_includedir := $(pkgincludedir)
 
 AM_LDFLAGS := -shared -version-info 1:0:0
@@ -149,7 +153,13 @@ AM_CFLAGS += -DUSE_MTD=1
 AM_CPPFLAGS += -DUSE_MTD=1
 libpayload_consumer_la_SOURCES += \
         ../update_engine/payload_consumer/mtd_file_descriptor.cc
+if TELAF
 libpayload_consumer_la_LIBADD += -ltelaf_flash_access
+else
+libpayload_consumer_la_LIBADD += -lnad_ab_al \
+                                  -lnad_mtd_al \
+                                  -lnad_ubi_al
+endif
 endif
 
 if !BUILD_HOST
@@ -211,7 +221,7 @@ delta_generator_requiredlibs := -lm \
                -lz \
                -lmincrypt \
                -lselinux \
-               -lprotobuf-lite\
+               -lprotobuf-lite \
                ./libpayload_generator.la \
                ./libpayload_consumer.la \
                -lbspatch \
@@ -299,19 +309,31 @@ update_engine_sideload_requiredlibs := -lm \
                -lbz2 \
                -lxz \
                -lcrypto \
-               -lnad_ab_al \
-               -ltelaf_flash_access
+               -lnad_ab_al
+
+if TARGET_NAND_BOOT
+if TELAF
+update_engine_sideload_requiredlibs += -ltelaf_flash_access
+else
+update_engine_sideload_requiredlibs += -lnad_mtd_al \
+               -lnad_ubi_al
+
+endif
+endif
 
 if USE_GLIB
 update_engine_sideload_CFLAGS := $(AM_CFLAGS) -DRECOVERY_API_VERSION=$(RECOVERY_API_VERSION) -DUSE_GLIB @GLIB_CFLAGS@
 update_engine_sideload_CPPFLAGS := $(AM_CPPFLAGS) -DRECOVERY_API_VERSION=$(RECOVERY_API_VERSION) -DUSE_GLIB @GLIB_CFLAGS@
-update_engine_sideload_LDADD := $(update_engine_sideload_requiredlibs) -lext4_utils -lmincrypt -llegato -lComponent_taf_lib_flash @GLIB_LIBS@
-update_engine_sideload_LDFLAGS := -L${PKG_CONFIG_SYSROOT_DIR}/telaf/legato/legato-af/build/sa525m/framework/lib -L${PKG_CONFIG_SYSROOT_DIR}/telaf/legato/legato-af/build/sa525m/system/app/tafUpdateSvc/staging/read-only/lib
+update_engine_sideload_LDADD := $(update_engine_sideload_requiredlibs) -lext4_utils -lmincrypt  @GLIB_LIBS@
 else
 update_engine_sideload_CFLAGS := $(AM_CFLAGS)  -DRECOVERY_API_VERSION=$(RECOVERY_API_VERSION)
 update_engine_sideload_CPPFLAGS :=  $(AM_CPPFLAGS) -DRECOVERY_API_VERSION=$(RECOVERY_API_VERSION)
-update_engine_sideload_LDADD := $(requiredlibs) -llegato -lComponent_taf_lib_flash
+update_engine_sideload_LDADD := $(requiredlibs)
+endif
+
+if TELAF
 update_engine_sideload_LDFLAGS := -L${PKG_CONFIG_SYSROOT_DIR}/telaf/legato/legato-af/build/sa525m/framework/lib -L${PKG_CONFIG_SYSROOT_DIR}/telaf/legato/legato-af/build/sa525m/system/app/tafUpdateSvc/staging/read-only/lib
+update_engine_sideload_LDADD +=  -llegato -lComponent_taf_lib_flash
 endif
 
 if BUILD_HOST
@@ -328,6 +350,12 @@ if TARGET_SUPPORTS_AB
 brillo_update_payload_CPPFLAGS += -DTARGET_SUPPORTS_AB
 if !BUILD_HOST
 brillo_update_payload_LDADD += -lnad_ab_al
+if TELAF
+brillo_update_payload_LDADD += -ltelaf_flash_access
+else
+brillo_update_payload_LDADD += -lnad_mtd_al \
+                               -lnad_ubi_al
+endif
 endif
 endif
 

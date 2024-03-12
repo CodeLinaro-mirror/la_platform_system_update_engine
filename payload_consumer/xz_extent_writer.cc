@@ -21,8 +21,11 @@ using std::vector;
 namespace chromeos_update_engine {
 
 namespace {
-//const brillo::Blob::size_type kOutputBufferLength = 16 * 1024;
+#if USE_TELAF
 const brillo::Blob::size_type kOutputBufferLength = 256 * 1024;
+#else
+const brillo::Blob::size_type kOutputBufferLength = 16 * 1024;
+#endif
 
 // xz uses a variable dictionary size which impacts on the compression ratio
 // and is required to be reconstructed in RAM during decompression. While we

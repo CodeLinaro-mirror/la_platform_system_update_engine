@@ -34,17 +34,13 @@
 #include "update_engine/payload_consumer/delta_performer.h"
 #include "update_engine/payload_consumer/payload_constants.h"
 
-#ifdef USE_MTD
-#define FLASH_ACCESS 1
-#endif
-
 using brillo::data_encoding::Base64Encode;
 using std::string;
 
 namespace chromeos_update_engine {
 
 namespace {
-#if FLASH_ACCESS
+#if USE_TELAF
 const off_t kReadFileBufferSize = 256 * 1024;
 #else
 const off_t kReadFileBufferSize = 128 * 1024;

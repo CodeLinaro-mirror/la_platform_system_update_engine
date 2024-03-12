@@ -103,7 +103,11 @@ FileDescriptorPtr CreateFileDescriptor(const char* path) {
   char ubi_path[64];
   LOG(INFO) << " CreateFileDescriptor check device type first,  mtdno " << mtd_no;
 
+#if USE_TELAF
   int mtd_system_ubi =  get_value_from_file(SYSTEM_UBI_MTD_NUM);
+#else
+  int mtd_system_ubi =  nad_get_value_from_file(SYSTEM_UBI_MTD_NUM);
+#endif
   if (mtd_system_ubi == -1) {
     LOG(INFO) << " failed to get mtd no for system ubi partition ";
     ret.reset(new EintrSafeFileDescriptor);
@@ -149,7 +153,11 @@ FileDescriptorPtr OpenFile(const char* path, int mode, int* err) {
     memcpy(dev_node, mtd_no, sizeof(mtd_no));
     snprintf(ubi_path, sizeof(ubi_path)-1, DEV_UBI_NODE, uid, vid);
 
+#if USE_TELAF
     int mtd_system_ubi =  get_value_from_file(SYSTEM_UBI_MTD_NUM);
+#else
+    int mtd_system_ubi =  nad_get_value_from_file(SYSTEM_UBI_MTD_NUM);
+#endif
     if (mtd_system_ubi == -1) {
       LOG(INFO) << " failed to get mtd no for system ubi partition ";
       return nullptr;
