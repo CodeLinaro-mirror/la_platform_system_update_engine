@@ -32,7 +32,7 @@
 #include "update_engine/common/subprocess.h"
 #include "update_engine/common/utils.h"
 
-#if USE_MTD
+#if USE_TELAF
 extern "C" {
 #include "telaf-flash-access.h"
 }
@@ -107,14 +107,23 @@ namespace chromeos_update_engine {
 
 MtdFileDescriptor::MtdFileDescriptor()
 #if USE_MTD
+#if USE_TELAF
     {}
+#else
+    : nad_mtd_ctx_(nullptr, &nad_mtd_close) {}
+#endif
 #else
     : read_ctx_(nullptr, &mtd_read_close),
       write_ctx_(nullptr, &mtd_write_close) {}
 #endif
 
 #if USE_MTD
-UbiFileDescriptor::UbiFileDescriptor() {}
+UbiFileDescriptor::UbiFileDescriptor()
+#if USE_TELAF
+    {}
+#else
+    : nad_ubi_ctx_(nullptr, &nad_ubi_close) {}
+#endif
 #endif
 
 bool MtdFileDescriptor::IsMtd(const char* path) {
@@ -130,6 +139,26 @@ bool MtdFileDescriptor::IsMtd(const char* path) {
   return true;
 #endif
 }
+
+#if USE_MTD && !USE_TELAF
+nad_mtd_hndl_t *MtdFileDescriptor::NadMtdHandler(int fd, const char *dev_node_name) {
+  nad_mtd_hndl_t *mtd_hndl;
+  int ret = -1;
+  LOG(INFO) << " MtdFileDescriptor::NadMtdHandler 1.1 mtd node name " << dev_node_name;
+  mtd_hndl = (nad_mtd_hndl_t *)malloc(sizeof(nad_mtd_hndl_t));
+  if (mtd_hndl == NULL) {
+      LOG(ERROR) << " MtdFileDescriptor::NadMtdHandler malloc failed " << ret;
+      ret = -1;
+  }
+  ret = nad_mtd_open(dev_node_name, mtd_hndl);
+  if(0 != ret)
+  {
+      LOG(ERROR) << " MtdFileDescriptor::NadMtdHandler open nad_mtd_open failed, ret " << ret;
+      ret = -1;
+  }
+  return mtd_hndl;
+}
+#endif
 
 bool MtdFileDescriptor::Open(const char* path, int flags, mode_t mode) {
   // This File Descriptor does not support read and write.
@@ -151,12 +180,23 @@ bool MtdFileDescriptor::Open(const char* path, int flags, mode_t mode) {
 #if !USE_MTD
     write_ctx_.reset(mtd_write_descriptor(fd_, path));
 #else
+#if USE_TELAF
     //telaf_connect_to_flash_access();
     ret = telaf_mtd_open (path);
     if (ret != 0){
        LOG(ERROR) << " MtdFileDescriptor open failed ";
        return false;
     }
+#else
+    LOG(INFO) << " MtdFileDescriptor::Open 1.4 write ";
+    nad_mtd_hndl_t *hndl = MtdFileDescriptor::NadMtdHandler(fd_, path);
+    if (hndl == NULL) {
+        LOG(INFO) << " MtdFileDescriptor::Open 1.6 ";
+        Close();
+        return false;
+    }
+    nad_mtd_ctx_.reset(hndl);
+#endif
 #endif
     nr_written_ = 0;
 
@@ -177,6 +217,7 @@ bool MtdFileDescriptor::Open(const char* path, int flags, mode_t mode) {
   }
   return true;
 #else
+#if USE_TELAF
   mtd_info_t *mtd_info;
   mtd_info = (mtd_info_t *) malloc(sizeof(mtd_info_t));
   if( mtd_info == NULL ) {
@@ -188,6 +229,7 @@ bool MtdFileDescriptor::Open(const char* path, int flags, mode_t mode) {
   ret = telaf_mtd_information(mtd_info);
   if (ret != 0){
     LOG(ERROR) << " telaf_mtd_information failed ";
+    free(mtd_info);
     return false;
   }
   total_blocks_number_ = mtd_info->blk_num;
@@ -200,10 +242,20 @@ bool MtdFileDescriptor::Open(const char* path, int flags, mode_t mode) {
     ret = telaf_mtd_erase_block (blk_num);
     if( ret != 0) {
       LOG(ERROR) << " MtdFileDescriptor::Open erase failed ";
+      free(mtd_info);
       return false;
     }
   }
   return true;
+#else
+  nad_mtd_hndl_t *hndl1 = nad_mtd_ctx_.get();
+  if (hndl1 == NULL) {
+    LOG(ERROR) << " mtd hndl context error MtdFileDescriptor::Open ";
+    Close();
+    return false;
+  }
+  return true;
+#endif
 #endif
 }
 
@@ -218,6 +270,10 @@ ssize_t MtdFileDescriptor::Read(void* buf, size_t count) {
   CHECK(read_ctx_);
   return mtd_read_data(read_ctx_.get(), static_cast<char*>(buf), count);
 #else
+#if !USE_TELAF
+  CHECK(nad_mtd_ctx_);
+  LOG(INFO) << "MtdFileDescriptor::Read 1.8 ";
+#endif
   return -1; // read is not performed here, its done in libbrillo file_stream.cc
 #endif
 }
@@ -233,7 +289,7 @@ ssize_t MtdFileDescriptor::Write(const void* buf, size_t count) {
   }
   return result;
 #else
-
+#if USE_TELAF
   ssize_t ret = -1;
   LOG(INFO) << " MtdFileDescriptor::Write mtd count:" << count;
   // assume count is always multiple of erase_size_ for block based flash apis
@@ -261,14 +317,42 @@ ssize_t MtdFileDescriptor::Write(const void* buf, size_t count) {
       return -1;
     }
   }
-  LOG(INFO) << " MtdFileDescriptor::Write chunk done";
   nr_written_ += count;
   return count;
+#else
+  if(nullptr == nad_mtd_ctx_.get())
+      LOG(ERROR) << "MtdFileDescriptor::Write nad_mtd_ctx_.get() returned null ";
+  nad_mtd_hndl_t *hndl1 = nad_mtd_ctx_.get();  
+  int iter = ((count > nr_written_) ? (count - nr_written_) : (count))/hndl1->info.writesize;
+  ssize_t ret = -1;
+  LOG(INFO) << " MtdFileDescriptor::Write mtd count:" << count;
+  // assume count is always multiple of erase_size_ for block based flash apis
+  unsigned char* source = reinterpret_cast<unsigned char*>(const_cast<void*>(buf));
+
+  unsigned char dest[hndl1->info.writesize];
+  memset(dest, 0, sizeof(dest));
+  int pages_written = nr_written_/hndl1->info.writesize;
+  for (int i = 1 ; i <= iter ; i++) {
+    memset(dest, 0, sizeof(dest));
+    memcpy(dest, source + (i-1)*(hndl1->info.writesize), hndl1->info.writesize);
+    ret = nad_mtd_write_page(hndl1, dest, pages_written + i-1, hndl1->info.writesize);
+    if(0 != ret) {
+      LOG(ERROR) << "MtdFileDescriptor::Write Failed";
+      return -1;
+    } else {
+      LOG(INFO) << "MtdFileDescriptor::Write success ";
+    }
+  }
+
+  nr_written_ += count;
+  return count;
+#endif
 #endif
 }
 
 off64_t MtdFileDescriptor::Seek(off64_t offset, int whence) {
 #if USE_MTD
+    LOG(INFO) << "MtdFileDescriptor::Seek  write_ctx_ return nr_written_ " << nr_written_;
     return nr_written_;
 #else
   if (write_ctx_) {
@@ -284,12 +368,44 @@ bool MtdFileDescriptor::Close() {
     write_ctx_.reset();
   return EintrSafeFileDescriptor::Close();
 #else
+#if USE_TELAF
   telaf_mtd_close();
+#else
+  LOG(INFO) << "MtdFileDescriptor::Close ";
+  nad_mtd_ctx_.reset();
+#endif
   return true;
 #endif
 }
 
-
+#if !USE_TELAF
+nad_ubi_hndl_t *UbiFileDescriptor::NadUbiHandler(int fd, const char *dev_node_name, int read_only) {
+  nad_ubi_hndl_t *ubi_hndl;
+  int ret = -1;
+  LOG(INFO) << " UbiFileDescriptor::NadUbiHandler ubi dev_node_name: " << dev_node_name;
+  ubi_hndl = (nad_ubi_hndl_t *)malloc(sizeof(nad_ubi_hndl_t));
+  if (ubi_hndl == NULL)
+  {
+      LOG(ERROR) << " UbiFileDescriptor::NadUbiHandler malloc failed " << ret;
+      ret = -1;
+      return NULL;
+  }
+  ret = nad_ubi_open(dev_node_name, ubi_hndl, read_only);
+  if(0 != ret)
+  {
+      LOG(ERROR) << " UbiFileDescriptor::NadUbiHandler open nad_ubi_open failed, ret " << ret;
+      ret = -1;
+  }
+  fd_ = ubi_hndl->fd;
+  ret = nad_ubi_ioctl(ubi_hndl, ubi_hndl->vol_info.data_bytes);
+  if(0 != ret)
+  {
+      LOG(ERROR) << " UbiFileDescriptor::NadUbiHandler open nad_ubi_open failed, ret " << ret;
+      ret = -1;
+  }
+ return ubi_hndl;
+}
+#endif
 
 bool UbiFileDescriptor::IsUbi(const char* path) {
   base::FilePath device_node(path);
@@ -315,6 +431,7 @@ bool UbiFileDescriptor::Open(const char* path, int flags, mode_t mode) {
   TEST_AND_RETURN_FALSE(
       EintrSafeFileDescriptor::Open(path, flags | O_CLOEXEC, mode));
 #else
+#if USE_TELAF
   /* read mode second arg as 1, for write mode set it as 0 */
   int ret = telaf_ubi_open (path, 0);
   if (ret != 0){
@@ -334,6 +451,9 @@ bool UbiFileDescriptor::Open(const char* path, int flags, mode_t mode) {
     return false;
   }
   LOG(INFO) << " UbiFileDescriptor ioctl ok ";
+#else
+  nad_ubi_hndl_t *hndl;
+#endif
 #endif
 
 #if !USE_MTD
@@ -353,13 +473,36 @@ bool UbiFileDescriptor::Open(const char* path, int flags, mode_t mode) {
       EintrSafeFileDescriptor::Close();
       return false;
     }
+#else
+  LOG(INFO) << " UbiFileDescriptor:: ioctl is handled in nad_ubi_open skipped here ";
 #endif
     mode_ = kWriteOnly;
     nr_written_ = 0;
+#if USE_MTD && !USE_TELAF
+    hndl = UbiFileDescriptor::NadUbiHandler(fd_, path, 0);
+    if(hndl == NULL) {
+      LOG(ERROR) << " NadUbiHandler handler init failed ";
+      return false;
+    }
+    nad_ubi_ctx_.reset(hndl);
+    LOG(INFO) << " UbiFileDescriptor::Open write only mode, leb size :" << hndl->vol_info.leb_size;
+#endif
   } else {
+#if USE_MTD && !USE_TELAF
+    hndl = UbiFileDescriptor::NadUbiHandler(fd_, path, 1);
+    nad_ubi_ctx_.reset(hndl);
+    LOG(INFO) << " UbiFileDescriptor::Open read only mode, leb size :" << hndl->vol_info.leb_size;
+#endif
     mode_ = kReadOnly;
   }
 
+#if USE_MTD && !USE_TELAF
+  nad_ubi_hndl_t *hndl1 = nad_ubi_ctx_.get();
+  if (!nad_ubi_ctx_) {
+    Close();
+    return false;
+  }
+#endif
   return true;
 }
 
@@ -378,7 +521,10 @@ ssize_t UbiFileDescriptor::Write(const void* buf, size_t count) {
   CHECK(mode_ == kWriteOnly);
   LOG(INFO) << "UbiFileDescriptor::Write " << count;
   ssize_t nr_chunk;
-#if USE_MTD
+#if !USE_MTD
+  nr_chunk = EintrSafeFileDescriptor::Write(buf, count);
+#else
+#if USE_TELAF
   int iter = count/16384;
   char dest[16384];
   char *source = reinterpret_cast<char*>(const_cast<void*>(buf));
@@ -406,14 +552,21 @@ ssize_t UbiFileDescriptor::Write(const void* buf, size_t count) {
     } else {
       LOG(INFO) << "UbiFileDescriptor::Write  ok";
     }
-
   } else {
     LOG(ERROR) << "UbiFileDescriptor::Write  count is multiple of 16384 ";
   }
- 
   nr_chunk = count;
 #else
-  nr_chunk = EintrSafeFileDescriptor::Write(buf, count);
+  nad_ubi_hndl_t *hndl1 = nad_ubi_ctx_.get();
+  LOG(INFO) << " UbiFileDescriptor:: get legsize before write operation " << hndl1->vol_info.leb_size;
+  int ret = nad_ubi_write (hndl1, reinterpret_cast<char*>(const_cast<void*>(buf)), count);
+  if(ret == 0) {
+    nr_chunk = count;
+    LOG(INFO) << "UbiFileDescriptor::Write  ok";
+  }else {
+    LOG(ERROR) << "UbiFileDescriptor::Write  error";
+  }
+#endif
 #endif
   if (nr_chunk >= 0) {
     nr_written_ += nr_chunk;
@@ -433,12 +586,30 @@ off64_t UbiFileDescriptor::Seek(off64_t offset, int whence) {
 
 bool UbiFileDescriptor::Close() {
   bool pad_ok = true;
-#if USE_MTD
-  if (mode_ == kWriteOnly) {
-#else
+#if !USE_MTD
   if (IsOpen() && mode_ == kWriteOnly) {
-#endif
-#if USE_MTD
+    while (nr_written_ < volume_size_) {
+      // We have written less than the whole volume. In order for us to clear
+      // the update marker, we need to fill the rest. It is recommended to fill
+      // UBI writes with 0xFF.
+      if (to_write > sizeof(buf)) {
+        to_write = sizeof(buf);
+      }
+      ssize_t nr_chunk;
+      nr_chunk = EintrSafeFileDescriptor::Write(buf, to_write);
+      if (nr_chunk < 0) {
+        //LOG(ERROR) << "Cannot 0xFF-pad before closing.";
+        // There is an error, but we can't really do any meaningful thing here.
+        pad_ok = false;
+        break;
+      }
+      nr_written_ += nr_chunk;
+    }
+  }
+  return EintrSafeFileDescriptor::Close() && pad_ok;
+#else
+  if (mode_ == kWriteOnly) {
+#if USE_TELAF
     char dest[16384];
     memset(dest, 0xFF, sizeof(dest));
     uint64_t to_write = volume_size_ - nr_written_;
@@ -463,7 +634,7 @@ bool UbiFileDescriptor::Close() {
         LOG(ERROR) << "UbiFileDescriptor::Close nr_written_: " << nr_written_;
         LOG(ERROR) << "UbiFileDescriptor::Close volume_size_: " << volume_size_;
         nr_written_ += pad_bytes;
-        to_write = volume_size_ - nr_written_; 
+        to_write = volume_size_ - nr_written_;
         int ret = telaf_ubi_write (dest, 16384);
         if(ret == 0) {
           LOG(INFO) << "UbiFileDescriptor::Close Write pad bytes ok";
@@ -472,8 +643,18 @@ bool UbiFileDescriptor::Close() {
           LOG(ERROR) << "UbiFileDescriptor::Close Write pad bytes error";
         }
     }
-
+  telaf_ubi_close();
+  LOG(INFO) << "UbiFileDescriptor::Close ,  pad_ok" << pad_ok;
+  return pad_ok;
 #else
+  nad_ubi_hndl_t *hndl1 = nad_ubi_ctx_.get();
+  LOG(INFO) << "UbiFileDescriptor::Close mode_ " << mode_;
+  LOG(INFO) << "UbiFileDescriptor::Close kWriteOnly " << kWriteOnly;
+  volume_size_ = hndl1->vol_info.data_bytes;
+  if (mode_ == kWriteOnly) {
+    char buf[1024];
+    uint64_t to_write = volume_size_ - nr_written_;
+    memset(buf, 0xFF, sizeof(buf));
     while (nr_written_ < volume_size_) {
       // We have written less than the whole volume. In order for us to clear
       // the update marker, we need to fill the rest. It is recommended to fill
@@ -482,7 +663,13 @@ bool UbiFileDescriptor::Close() {
         to_write = sizeof(buf);
       }
       ssize_t nr_chunk;
-      nr_chunk = EintrSafeFileDescriptor::Write(buf, to_write);
+      int ret = nad_ubi_write(hndl1, buf, to_write);
+      if(ret == 0) {
+        nr_chunk = to_write;
+        LOG(INFO) << "UbiFileDescriptor::Close Write pad bytes ok" << nr_chunk ;
+      } else {
+        LOG(ERROR) << "UbiFileDescriptor::Close Write pad bytes error" << nr_chunk;
+      }
       if (nr_chunk < 0) {
         //LOG(ERROR) << "Cannot 0xFF-pad before closing.";
         // There is an error, but we can't really do any meaningful thing here.
@@ -491,15 +678,13 @@ bool UbiFileDescriptor::Close() {
       }
       nr_written_ += nr_chunk;
     }
-#endif
   }
-#if !USE_MTD
-  return EintrSafeFileDescriptor::Close() && pad_ok;
-#else
-  telaf_ubi_close();
-  LOG(INFO) << "UbiFileDescriptor::Close ,  pad_ok" << pad_ok;
+  LOG(INFO) << " UbiFileDescriptor:: Close ";
+  nad_ubi_close(hndl1);
   return pad_ok;
 #endif
+#endif
+  }
 }
 
 #if USE_MTD

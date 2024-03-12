@@ -26,6 +26,10 @@
 #include "update_engine/payload_consumer/file_descriptor.h"
 
 #if USE_MTD
+#if !USE_TELAF
+#include "nad-mtd-al.h"
+#include "nad-ubi-al.h"
+#endif
 #define MRC_UNUSED(arg) (arg = arg)
 #define SYS_CLASS_UBI_DEV_PATH       "/sys/class/ubi/ubi%d/"
 #define SYS_CLASS_UBI_VOL_COUNT_PATH "/sys/class/ubi/ubi%d/volumes_count"
@@ -51,6 +55,11 @@ class MtdFileDescriptor : public EintrSafeFileDescriptor {
   ssize_t Write(const void* buf, size_t count) override;
   off64_t Seek(off64_t offset, int whence) override;
   uint64_t BlockDevSize() override { return 0; }
+#if USE_MTD
+#if !USE_TELAF
+  nad_mtd_hndl_t *NadMtdHandler(int fd, const char *dev_node_name);
+#endif
+#endif
   bool BlkIoctl(int request,
                 uint64_t start,
                 uint64_t length,
@@ -60,7 +69,11 @@ class MtdFileDescriptor : public EintrSafeFileDescriptor {
   bool Close() override;
 
  private:
-#if !USE_MTD
+#if USE_MTD
+#if !USE_TELAF
+  std::unique_ptr<nad_mtd_hndl_t, decltype(&nad_mtd_close)> nad_mtd_ctx_;
+#endif
+#else
   std::unique_ptr<MtdReadContext, decltype(&mtd_read_close)> read_ctx_;
   std::unique_ptr<MtdWriteContext, decltype(&mtd_write_close)> write_ctx_;
 #endif
@@ -101,6 +114,9 @@ class UbiFileDescriptor : public EintrSafeFileDescriptor {
   ssize_t Write(const void* buf, size_t count) override;
   off64_t Seek(off64_t offset, int whence) override;
   uint64_t BlockDevSize() override { return 0; }
+#if !USE_TELAF
+  nad_ubi_hndl_t *NadUbiHandler(int fd, const char *dev_node_name, int read_only);
+#endif
   bool BlkIoctl(int request,
                 uint64_t start,
                 uint64_t length,
@@ -121,6 +137,9 @@ class UbiFileDescriptor : public EintrSafeFileDescriptor {
   uint32_t leb_number_;
   uint32_t free_leb_number_;
   uint64_t nr_written_;
+#if !USE_TELAF
+  std::unique_ptr<nad_ubi_hndl_t, decltype(&nad_ubi_close)> nad_ubi_ctx_;
+#endif
 
   Mode mode_;
 };

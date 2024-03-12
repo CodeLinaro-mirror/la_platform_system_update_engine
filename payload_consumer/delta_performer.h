@@ -37,7 +37,12 @@
 
 #if USE_MTD
 extern "C" {
+#if USE_TELAF
 #include "telaf-flash-access.h"
+#else
+#include "nad-mtd-al.h"
+#include "nad-ubi-al.h"
+#endif
 }
 #endif
 
