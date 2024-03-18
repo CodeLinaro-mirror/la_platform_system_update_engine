@@ -180,10 +180,12 @@ libupdate_engine_client_la_LIBADD := -lm -lpthread -levent  -lprotobuf -lbspatch
 endif
 
 
+if BUILD_HOST
 ue_delta_generator_src_files := \
     ../update_engine/payload_generator/generate_delta_main.cc
 
 delta_generator_SOURCES := $(ue_delta_generator_src_files)
+endif
 
 requiredlibs := -lm \
                -lpthread \
@@ -229,7 +231,6 @@ delta_generator_requiredlibs := -lm \
                -lcrypto \
                -lsparse
 
-
 if USE_GLIB
 delta_generator_CFLAGS := $(AM_CFLAGS) -DRECOVERY_API_VERSION=$(RECOVERY_API_VERSION) -DUSE_GLIB @GLIB_CFLAGS@
 delta_generator_CPPFLAGS := $(AM_CPPFLAGS) -DRECOVERY_API_VERSION=$(RECOVERY_API_VERSION) -DUSE_GLIB @GLIB_CFLAGS@
@@ -240,7 +241,6 @@ delta_generator_CPPFLAGS :=  $(AM_CPPFLAGS) -DRECOVERY_API_VERSION=$(RECOVERY_AP
 delta_generator_LDADD := $(delta_generator_requiredlibs)
 endif
 
-bin_PROGRAMS = delta_generator
 
 cpp_sources := update_engine/scripts/brillo_update_payload
 
@@ -260,8 +260,6 @@ brillo_update_payload_CPPFLAGS += -I $(WORKSPACE)/system/core/include
 brillo_update_payload_LDADD := $(delta_generator_requiredlibs)
 endif
 
-
-bin_PROGRAMS += brillo_update_payload
 
 update_engine_sideload_src_files := \
     ../update_engine/boot_control_recovery.cc \
@@ -301,21 +299,26 @@ update_engine_sideload_requiredlibs := -lm \
                -lbz2 \
                -lxz \
                -lcrypto \
-               -labctl \
+               -lnad_ab_al \
                -ltelaf_flash_access
 
 if USE_GLIB
 update_engine_sideload_CFLAGS := $(AM_CFLAGS) -DRECOVERY_API_VERSION=$(RECOVERY_API_VERSION) -DUSE_GLIB @GLIB_CFLAGS@
 update_engine_sideload_CPPFLAGS := $(AM_CPPFLAGS) -DRECOVERY_API_VERSION=$(RECOVERY_API_VERSION) -DUSE_GLIB @GLIB_CFLAGS@
-update_engine_sideload_LDADD := $(update_engine_sideload_requiredlibs) -lext4_utils -lmincrypt @GLIB_LIBS@
+update_engine_sideload_LDADD := $(update_engine_sideload_requiredlibs) -lext4_utils -lmincrypt -llegato -lComponent_taf_lib_flash @GLIB_LIBS@
+update_engine_sideload_LDFLAGS := -L${PKG_CONFIG_SYSROOT_DIR}/telaf/legato/legato-af/build/sa525m/framework/lib -L${PKG_CONFIG_SYSROOT_DIR}/telaf/legato/legato-af/build/sa525m/system/app/tafUpdateSvc/staging/read-only/lib
 else
 update_engine_sideload_CFLAGS := $(AM_CFLAGS)  -DRECOVERY_API_VERSION=$(RECOVERY_API_VERSION)
 update_engine_sideload_CPPFLAGS :=  $(AM_CPPFLAGS) -DRECOVERY_API_VERSION=$(RECOVERY_API_VERSION)
-update_engine_sideload_LDADD := $(requiredlibs)
+update_engine_sideload_LDADD := $(requiredlibs) -llegato -lComponent_taf_lib_flash
+update_engine_sideload_LDFLAGS := -L${PKG_CONFIG_SYSROOT_DIR}/telaf/legato/legato-af/build/sa525m/framework/lib -L${PKG_CONFIG_SYSROOT_DIR}/telaf/legato/legato-af/build/sa525m/system/app/tafUpdateSvc/staging/read-only/lib
 endif
 
-if !BUILD_HOST
-bin_PROGRAMS += update_engine_sideload
+if BUILD_HOST
+bin_PROGRAMS = brillo_update_payload
+bin_PROGRAMS += delta_generator
+else
+bin_PROGRAMS = update_engine_sideload
 endif
 
 pkgconfigdir := $(libdir)/pkgconfig
@@ -324,7 +327,7 @@ EXTRA_DIST := $(pkgconfig_DATA)
 if TARGET_SUPPORTS_AB
 brillo_update_payload_CPPFLAGS += -DTARGET_SUPPORTS_AB
 if !BUILD_HOST
-brillo_update_payload_LDADD += -labctl
+brillo_update_payload_LDADD += -lnad_ab_al
 endif
 endif
 
