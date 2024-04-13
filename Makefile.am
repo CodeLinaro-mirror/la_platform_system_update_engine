@@ -91,12 +91,12 @@ libpayload_generator_la_SOURCES := \
 if USE_GLIB
 libpayload_generator_la_CFLAGS := $(AM_CFLAGS) -DUSE_GLIB @GLIB_CFLAGS@
 libpayload_generator_la_CPPFLAGS := $(AM_CPPFLAGS) -DUSE_GLIB @GLIB_CFLAGS@
-libpayload_generator_la_LIBADD := -lm -lpthread -levent -lprotobuf @GLIB_LIBS@
+libpayload_generator_la_LIBADD := -lm -lpthread -levent -lprotobuf-lite @GLIB_LIBS@
 libpayload_generator_la_LDFLAGS := -all-static
 else
 libpayload_generator_la_CFLAGS := $(AM_CFLAGS)
 libpayload_generator_la_CPPFLAGS := $(AM_CPPFLAGS)
-libpayload_generator_la_LIBADD := -lm -lpthread -levent -lprotobuf
+libpayload_generator_la_LIBADD := -lm -lpthread -levent -lprotobuf-lite
 libpayload_generator_la_LDFLAGS := -all-static
 endif
 
@@ -135,12 +135,12 @@ libpayload_consumer_la_SOURCES := \
 if USE_GLIB
 libpayload_consumer_la_CFLAGS := $(AM_CFLAGS) -DUSE_GLIB @GLIB_CFLAGS@
 libpayload_consumer_la_CPPFLAGS := $(AM_CPPFLAGS) -DUSE_GLIB @GLIB_CFLAGS@
-libpayload_consumer_la_LIBADD := -lm -lpthread -levent -lprotobuf -lbspatch ./libpayload_generator.la -lbrillo -lchrome -lxz @GLIB_LIBS@
+libpayload_consumer_la_LIBADD := -lm -lpthread -levent -lprotobuf-lite -lbspatch ./libpayload_generator.la -lbrillo -lchrome -lxz @GLIB_LIBS@
 libpayload_consumer_la_LDFLAGS := -all-static
 else
 libpayload_consumer_la_CFLAGS := $(AM_CFLAGS)
 libpayload_consumer_la_CPPFLAGS := $(AM_CPPFLAGS)
-libpayload_consumer_la_LIBADD := -lm -lpthread -levent  -lprotobuf -lbspatch -lxz
+libpayload_consumer_la_LIBADD := -lm -lpthread -levent  -lprotobuf-lite -lbspatch -lxz
 libpayload_consumer_la_LDFLAGS := -all-static
 endif
 
@@ -171,19 +171,21 @@ libupdate_engine_client_la_SOURCES := \
 if USE_GLIB
 libupdate_engine_client_la_CFLAGS := $(AM_CFLAGS) -DUSE_GLIB @GLIB_CFLAGS@
 libupdate_engine_client_la_CPPFLAGS := $(AM_CPPFLAGS) -DUSE_GLIB @GLIB_CFLAGS@
-libupdate_engine_client_la_LIBADD := -lm -lpthread -lprotobuf -lcurl -lmodpb64 -lbinderstreaming -lchrome -lbrillo -levent -lutils -lbspatch ./libpayload_consumer.la @GLIB_LIBS@
+libupdate_engine_client_la_LIBADD := -lm -lpthread -lprotobuf-lite -lcurl -lmodpb64 -lbinderstreaming -lchrome -lbrillo -levent -lutils -lbspatch ./libpayload_consumer.la @GLIB_LIBS@
 libupdate_engine_client_la_LDFLAGS := -all-static
 else
 libupdate_engine_client_la_CFLAGS := $(AM_CFLAGS)
 libupdate_engine_client_la_CPPFLAGS := $(AM_CPPFLAGS)
-libupdate_engine_client_la_LIBADD := -lm -lpthread -levent  -lprotobuf -lbspatch
+libupdate_engine_client_la_LIBADD := -lm -lpthread -levent  -lprotobuf-lite -lbspatch
 endif
 
 
+if BUILD_HOST
 ue_delta_generator_src_files := \
     ../update_engine/payload_generator/generate_delta_main.cc
 
 delta_generator_SOURCES := $(ue_delta_generator_src_files)
+endif
 
 requiredlibs := -lm \
                -lpthread \
@@ -192,7 +194,7 @@ requiredlibs := -lm \
                -lselinux \
                -lcutils \
                -llog \
-               -lprotobuf \
+               -lprotobuf-lite \
                ./libpayload_generator.la \
                ./libpayload_consumer.la \
                -lalzma \
@@ -209,7 +211,7 @@ delta_generator_requiredlibs := -lm \
                -lz \
                -lmincrypt \
                -lselinux \
-               -lprotobuf\
+               -lprotobuf-lite\
                ./libpayload_generator.la \
                ./libpayload_consumer.la \
                -lbspatch \
@@ -229,7 +231,6 @@ delta_generator_requiredlibs := -lm \
                -lcrypto \
                -lsparse
 
-
 if USE_GLIB
 delta_generator_CFLAGS := $(AM_CFLAGS) -DRECOVERY_API_VERSION=$(RECOVERY_API_VERSION) -DUSE_GLIB @GLIB_CFLAGS@
 delta_generator_CPPFLAGS := $(AM_CPPFLAGS) -DRECOVERY_API_VERSION=$(RECOVERY_API_VERSION) -DUSE_GLIB @GLIB_CFLAGS@
@@ -240,7 +241,6 @@ delta_generator_CPPFLAGS :=  $(AM_CPPFLAGS) -DRECOVERY_API_VERSION=$(RECOVERY_AP
 delta_generator_LDADD := $(delta_generator_requiredlibs)
 endif
 
-bin_PROGRAMS = delta_generator
 
 cpp_sources := update_engine/scripts/brillo_update_payload
 
@@ -261,8 +261,6 @@ brillo_update_payload_LDADD := $(delta_generator_requiredlibs)
 endif
 
 
-bin_PROGRAMS += brillo_update_payload
-
 update_engine_sideload_src_files := \
     ../update_engine/boot_control_recovery.cc \
     ../update_engine/network_selector_stub.cc \
@@ -281,13 +279,13 @@ update_engine_sideload_requiredlibs := -lm \
                -lz \
                -lmincrypt \
                -lselinux \
-               -lbssl \
+               -lssl \
                -lbrillo \
                -lchrome \
                -lcutils \
                -levent \
                -llog \
-               -lprotobuf \
+               -lprotobuf-lite \
                ./libpayload_generator.la \
                ./libpayload_consumer.la \
                ./libupdate_engine_client.la \
@@ -301,21 +299,26 @@ update_engine_sideload_requiredlibs := -lm \
                -lbz2 \
                -lxz \
                -lcrypto \
-               -labctl \
+               -lnad_ab_al \
                -ltelaf_flash_access
 
 if USE_GLIB
 update_engine_sideload_CFLAGS := $(AM_CFLAGS) -DRECOVERY_API_VERSION=$(RECOVERY_API_VERSION) -DUSE_GLIB @GLIB_CFLAGS@
 update_engine_sideload_CPPFLAGS := $(AM_CPPFLAGS) -DRECOVERY_API_VERSION=$(RECOVERY_API_VERSION) -DUSE_GLIB @GLIB_CFLAGS@
-update_engine_sideload_LDADD := $(update_engine_sideload_requiredlibs) -lext4_utils -lmincrypt @GLIB_LIBS@
+update_engine_sideload_LDADD := $(update_engine_sideload_requiredlibs) -lext4_utils -lmincrypt -llegato -lComponent_taf_lib_flash @GLIB_LIBS@
+update_engine_sideload_LDFLAGS := -L${PKG_CONFIG_SYSROOT_DIR}/telaf/legato/legato-af/build/sa525m/framework/lib -L${PKG_CONFIG_SYSROOT_DIR}/telaf/legato/legato-af/build/sa525m/system/app/tafUpdateSvc/staging/read-only/lib
 else
 update_engine_sideload_CFLAGS := $(AM_CFLAGS)  -DRECOVERY_API_VERSION=$(RECOVERY_API_VERSION)
 update_engine_sideload_CPPFLAGS :=  $(AM_CPPFLAGS) -DRECOVERY_API_VERSION=$(RECOVERY_API_VERSION)
-update_engine_sideload_LDADD := $(requiredlibs)
+update_engine_sideload_LDADD := $(requiredlibs) -llegato -lComponent_taf_lib_flash
+update_engine_sideload_LDFLAGS := -L${PKG_CONFIG_SYSROOT_DIR}/telaf/legato/legato-af/build/sa525m/framework/lib -L${PKG_CONFIG_SYSROOT_DIR}/telaf/legato/legato-af/build/sa525m/system/app/tafUpdateSvc/staging/read-only/lib
 endif
 
-if !BUILD_HOST
-bin_PROGRAMS += update_engine_sideload
+if BUILD_HOST
+bin_PROGRAMS = brillo_update_payload
+bin_PROGRAMS += delta_generator
+else
+bin_PROGRAMS = update_engine_sideload
 endif
 
 pkgconfigdir := $(libdir)/pkgconfig
@@ -324,7 +327,7 @@ EXTRA_DIST := $(pkgconfig_DATA)
 if TARGET_SUPPORTS_AB
 brillo_update_payload_CPPFLAGS += -DTARGET_SUPPORTS_AB
 if !BUILD_HOST
-brillo_update_payload_LDADD += -labctl
+brillo_update_payload_LDADD += -lnad_ab_al
 endif
 endif
 
