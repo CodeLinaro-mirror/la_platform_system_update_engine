@@ -254,6 +254,19 @@ bool MtdFileDescriptor::Open(const char* path, int flags, mode_t mode) {
     Close();
     return false;
   }
+  total_blocks_number_ = hndl1->info.size / hndl1->info.erasesize;
+  erase_size_ = hndl1->info.erasesize;
+  write_size_ = hndl1->info.writesize;
+
+  for (int blk_num = 0 ; blk_num < total_blocks_number_ ; blk_num++) {
+    LOG(INFO) << " MtdFileDescriptor::Open erase block: "<< blk_num;
+    ret = nad_mtd_erase_block(hndl1, blk_num);
+    if( ret != 0) {
+      LOG(ERROR) << " MtdFileDescriptor::Open erase failed ";
+      return false;
+    }
+  }
+
   return true;
 #endif
 #endif
