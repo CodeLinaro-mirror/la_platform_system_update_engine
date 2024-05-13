@@ -305,12 +305,12 @@ update_engine_sideload_requiredlibs := -lm \
 if USE_GLIB
 update_engine_sideload_CFLAGS := $(AM_CFLAGS) -DRECOVERY_API_VERSION=$(RECOVERY_API_VERSION) -DUSE_GLIB @GLIB_CFLAGS@
 update_engine_sideload_CPPFLAGS := $(AM_CPPFLAGS) -DRECOVERY_API_VERSION=$(RECOVERY_API_VERSION) -DUSE_GLIB @GLIB_CFLAGS@
-update_engine_sideload_LDADD := $(update_engine_sideload_requiredlibs) -lext4_utils -lmincrypt -llegato -lComponent_taf_lib_flash @GLIB_LIBS@
+update_engine_sideload_LDADD := $(update_engine_sideload_requiredlibs) -lext4_utils -lmincrypt -llegato @GLIB_LIBS@
 update_engine_sideload_LDFLAGS := -L${PKG_CONFIG_SYSROOT_DIR}/telaf/legato/legato-af/build/sa525m/framework/lib -L${PKG_CONFIG_SYSROOT_DIR}/telaf/legato/legato-af/build/sa525m/system/app/tafUpdateSvc/staging/read-only/lib
 else
 update_engine_sideload_CFLAGS := $(AM_CFLAGS)  -DRECOVERY_API_VERSION=$(RECOVERY_API_VERSION)
 update_engine_sideload_CPPFLAGS :=  $(AM_CPPFLAGS) -DRECOVERY_API_VERSION=$(RECOVERY_API_VERSION)
-update_engine_sideload_LDADD := $(requiredlibs) -llegato -lComponent_taf_lib_flash
+update_engine_sideload_LDADD := $(requiredlibs) -llegato
 update_engine_sideload_LDFLAGS := -L${PKG_CONFIG_SYSROOT_DIR}/telaf/legato/legato-af/build/sa525m/framework/lib -L${PKG_CONFIG_SYSROOT_DIR}/telaf/legato/legato-af/build/sa525m/system/app/tafUpdateSvc/staging/read-only/lib
 endif
 
