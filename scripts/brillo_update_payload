@@ -368,7 +368,7 @@ extract_image_brillo() {
   local partitions_array="$2"
   local partitions_order="${3:-}"
 
-  local partitions=("boot" "dtbo" "rootfs" "telaf")
+  local partitions=("boot" "dtbo" "rootfs")
   local ab_partitions_list
   ab_partitions_list=$(create_tempfile "ab_partitions_list.XXXXXX")
   CLEANUP_FILES+=("${ab_partitions_list}")
