@@ -50,7 +50,11 @@ class BootControlRecovery : public BootControlInterface {
   bool SetActiveBootSlot(BootControlInterface::Slot slot) override;
   bool MarkBootSuccessfulAsync(base::Callback<void(bool)> callback) override;
 #ifdef USE_LE_MODE
+#ifdef USE_MTD
   char* getMtdBlock(char* rootfs_volume) const ;
+#else
+  char* getMmcPath(char* search_part) const ;
+#endif
 #endif
  private:
   // NOTE: There is no way to release/unload HAL implementations so
