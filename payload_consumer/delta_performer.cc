@@ -147,7 +147,7 @@ FileDescriptorPtr OpenFile(const char* path, int mode, int* err) {
     LOG(INFO) << " no partition name found path ";
     memcpy(dev_node, path, sizeof(path));
   } else {
-    int uid, vid, err;
+    int uid = -1, vid = -1, err;
     char ubi_path[64];
     LOG(INFO) << " CreateFileDescriptor check device type first,  mtdno " << mtd_no;
     memcpy(dev_node, mtd_no, sizeof(mtd_no));

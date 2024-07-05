@@ -696,8 +696,8 @@ bool UbiFileDescriptor::Close() {
   nad_ubi_close(hndl1);
   return pad_ok;
 #endif
-#endif
   }
+#endif
 }
 
 #if USE_MTD

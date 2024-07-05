@@ -175,7 +175,6 @@ status_t BnStreamUpdateService::onTransact(
             payload_obj->ApplyUpdatePayload(
                str, payload_offset, payload_size, header_init, update_status_fd);
             LOG(INFO) << "\n  applypayload done ";
-      
             for (int i = mCallbacks.size() - 1; i >= 0; i--)
             {
               LOG(INFO) << " execute callback ";
@@ -183,6 +182,7 @@ status_t BnStreamUpdateService::onTransact(
               cb->triggerNotify();
               mCallbacks.removeAt(i);
             }
+            delete payload_obj;
             return NO_ERROR;
         } break;
         case TRANSACTION_REGISTER_CALLBACK :
