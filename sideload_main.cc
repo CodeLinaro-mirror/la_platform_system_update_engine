@@ -339,7 +339,7 @@ int main(int argc, char** argv) {
         sp<android::ProcessState> proc(android::ProcessState::self());
         android::ProcessState::self()->startThreadPool();
         std::string::size_type strtype;
-        std::string size = payload_header[1].substr(10, 8);
+        std::string size = payload_header[1].substr(payload_header[1].find("=") + 1);
         payload_size = std::stoi( size,&strtype ); // "The size of the CrAU part of the payload. If 0 is passed, it "
                                                   // "will be autodetected."
         LOG(INFO) << " update_engine_client payload size :" << payload_size;
