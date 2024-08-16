@@ -249,6 +249,7 @@ bool BootControlRecovery::GetPartitionDevice(const string& partition_name,
   char *inactive_mtd_block = BootControlRecovery::getMtdBlock(inactive_partition);
   LOG(INFO) << "boot_control inactive_mtd_block: " << inactive_mtd_block;
   str.assign(inactive_mtd_block);
+  free(inactive_mtd_block);
 #else
   char *inactive_mmc_path = BootControlRecovery::getMmcPath(inactive_partition);
   LOG(INFO) << "boot_control inactive_mmc_path: " << inactive_mmc_path;
@@ -296,7 +297,6 @@ char* BootControlRecovery::getMmcPath(char* search_part) const {
     }
 
     snprintf(part_mmc_path, PATH_MAX, MMC_BLOCK_BY_NAME"%s", new_path);
-    printf("mmc path: %s \n", part_mmc_path);
     LOG(INFO) << " mmc path:  " << part_mmc_path;
 
     return strdup(part_mmc_path);
