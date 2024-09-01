@@ -67,6 +67,10 @@
 #endif
 using std::string;
 
+#ifndef USE_MTD
+#define MMC_BLOCK_BY_NAME         "/dev/block/bootdevice/by-name/"
+#endif
+
 #ifdef USE_MTD
 #define FLASH_ACCESS 1
 #endif
@@ -222,7 +226,6 @@ bool BootControlRecovery::GetPartitionDevice(const string& partition_name,
   // Set the inactive slot to the non-boot slot (1->0, 0->1)
   chromeos_update_engine::boot_control::inactive_slot = (chromeos_update_engine::boot_control::boot_slot + 1)%2;
   LOG(INFO) << "boot_control current inactive slot  " << chromeos_update_engine::boot_control::inactive_slot;
-  char *inactive_mtd_block;
   char inactive_partition[PATH_MAX];
   std::string str;
   LOG(INFO) << "boot_control partition_name:  " << partition_name.c_str();
@@ -242,15 +245,23 @@ bool BootControlRecovery::GetPartitionDevice(const string& partition_name,
   str.assign(inactive_partition);
 #else
   LOG(INFO) << " boot_control inactive_partition  " << inactive_partition;
-  inactive_mtd_block = BootControlRecovery::getMtdBlock(inactive_partition);
+#ifdef USE_MTD
+  char *inactive_mtd_block = BootControlRecovery::getMtdBlock(inactive_partition);
   LOG(INFO) << "boot_control inactive_mtd_block: " << inactive_mtd_block;
   str.assign(inactive_mtd_block);
+#else
+  char *inactive_mmc_path = BootControlRecovery::getMmcPath(inactive_partition);
+  LOG(INFO) << "boot_control inactive_mmc_path: " << inactive_mmc_path;
+  str.assign(inactive_mmc_path);
+  free(inactive_mmc_path);
+#endif
 #endif
   *device = str;
   return true;
 }
 
 #ifndef FLASH_ACCESS
+#ifdef USE_MTD
 char* BootControlRecovery::getMtdBlock(char* rootfs_volume) const {
     int err = mtd_scan_partitions();
     if (err == -1){
@@ -266,6 +277,31 @@ char* BootControlRecovery::getMtdBlock(char* rootfs_volume) const {
     snprintf(mtd_devname, sizeof(mtd_devname), "/dev/mtdblock%d", mtd->device_index);
     return strdup(mtd_devname);
 }
+#else
+char* BootControlRecovery::getMmcPath(char* search_part) const {
+    char part_mmc_path[PATH_MAX] = {0};
+    char new_path[PATH_MAX] = {0};
+
+    if(strncmp(search_part, "rootfs", strlen(search_part)) == 0 || strncmp(search_part, "rootfs_a", strlen(search_part)) == 0)
+    {
+       snprintf(new_path, strlen("system")+1, "%s", "system");
+    }
+    else if(strncmp(search_part, "rootfs_b", strlen(search_part)) == 0)
+    {
+       snprintf(new_path, strlen("system_b")+1, "%s", "system_b");
+    }
+    else
+    {
+        snprintf(new_path, strlen(search_part)+1, "%s", search_part);
+    }
+
+    snprintf(part_mmc_path, PATH_MAX, MMC_BLOCK_BY_NAME"%s", new_path);
+    printf("mmc path: %s \n", part_mmc_path);
+    LOG(INFO) << " mmc path:  " << part_mmc_path;
+
+    return strdup(part_mmc_path);
+}
+#endif
 #endif
 
 bool BootControlRecovery::IsSlotBootable(Slot slot) const {

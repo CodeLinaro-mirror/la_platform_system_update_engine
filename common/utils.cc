@@ -1089,9 +1089,11 @@ bool ReadExtents(const string& path, const vector<Extent>& extents,
 }
 
 bool GetBootId(string* boot_id) {
+#ifndef USE_LE_MODE
   TEST_AND_RETURN_FALSE(
       base::ReadFileToString(base::FilePath(kBootIdPath), boot_id));
   base::TrimWhitespaceASCII(*boot_id, base::TRIM_TRAILING, boot_id);
+#endif
   return true;
 }
 
