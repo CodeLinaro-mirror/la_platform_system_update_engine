@@ -333,9 +333,11 @@ ssize_t MtdFileDescriptor::Write(const void* buf, size_t count) {
   nr_written_ += count;
   return count;
 #else
-  if(nullptr == nad_mtd_ctx_.get())
-      LOG(ERROR) << "MtdFileDescriptor::Write nad_mtd_ctx_.get() returned null ";
-  nad_mtd_hndl_t *hndl1 = nad_mtd_ctx_.get();  
+  nad_mtd_hndl_t *hndl1 = nad_mtd_ctx_.get();
+  if(nullptr == hndl1){
+      LOG(ERROR) << "MtdFileDescriptor::Write Failed, nad_mtd_ctx_.get() returned null ";
+      return -1;
+  }
   int iter = ((count > nr_written_) ? (count - nr_written_) : (count))/hndl1->info.writesize;
   ssize_t ret = -1;
   LOG(INFO) << " MtdFileDescriptor::Write mtd count:" << count;
@@ -503,6 +505,10 @@ bool UbiFileDescriptor::Open(const char* path, int flags, mode_t mode) {
   } else {
 #if USE_MTD && !USE_TELAF
     hndl = UbiFileDescriptor::NadUbiHandler(fd_, path, 1);
+    if(hndl == NULL) {
+      LOG(ERROR) << " NadUbiHandler handler init failed ";
+      return false;
+    }
     nad_ubi_ctx_.reset(hndl);
     LOG(INFO) << " UbiFileDescriptor::Open read only mode, leb size :" << hndl->vol_info.leb_size;
 #endif
@@ -533,7 +539,7 @@ ssize_t UbiFileDescriptor::Read(void* buf, size_t count) {
 ssize_t UbiFileDescriptor::Write(const void* buf, size_t count) {
   CHECK(mode_ == kWriteOnly);
   LOG(INFO) << "UbiFileDescriptor::Write " << count;
-  ssize_t nr_chunk;
+  ssize_t nr_chunk = 0;
 #if !USE_MTD
   nr_chunk = EintrSafeFileDescriptor::Write(buf, count);
 #else
@@ -658,7 +664,6 @@ bool UbiFileDescriptor::Close() {
     }
   telaf_ubi_close();
   LOG(INFO) << "UbiFileDescriptor::Close ,  pad_ok" << pad_ok;
-  return pad_ok;
 #else
   nad_ubi_hndl_t *hndl1 = nad_ubi_ctx_.get();
   LOG(INFO) << "UbiFileDescriptor::Close mode_ " << mode_;
@@ -694,10 +699,10 @@ bool UbiFileDescriptor::Close() {
   }
   LOG(INFO) << " UbiFileDescriptor:: Close ";
   nad_ubi_close(hndl1);
-  return pad_ok;
 #endif
   }
 #endif
+  return pad_ok;
 }
 
 #if USE_MTD
