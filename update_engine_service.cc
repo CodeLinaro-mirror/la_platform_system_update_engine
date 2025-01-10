@@ -256,12 +256,13 @@ void UpdateNotifyService::triggerNotify()
 void stream_update_service_init() {
     defaultServiceManager()->addService(String16("StreamUpdateService"), new StreamUpdateService());
     android::ProcessState::self()->startThreadPool();
-    if (IPCThreadState::self() == NULL) {
+    auto thread = IPCThreadState::self();
+    if (thread == NULL) {
        printf("Error in self() call\n");
        return;
     }
     LOG(INFO) << "StreamUpdateService service is added";
-    IPCThreadState::self()->joinThreadPool();
+    thread->joinThreadPool();
     LOG(INFO) << "StreamUpdateService service thread joined";
 }
 
