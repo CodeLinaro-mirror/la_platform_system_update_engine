@@ -120,7 +120,7 @@ class SideloadDaemonState : public DaemonStateInterface,
 };
 
 // Apply an update payload directly from the given payload URI.
-ErrorCode ApplyUpdatePayload(const string& payload,
+bool ApplyUpdatePayload(const string& payload,
                         int64_t payload_offset,
                         int64_t payload_size,
                         const vector<string>& headers,
@@ -145,13 +145,13 @@ ErrorCode ApplyUpdatePayload(const string& payload,
       boot_control::CreateBootControl();
   if (!boot_control) {
     LOG(ERROR) << "Error initializing the BootControlInterface.";
-    return ErrorCode::kError;
+    return false;
   }
 
   std::unique_ptr<HardwareInterface> hardware = hardware::CreateHardware();
   if (!hardware) {
     LOG(ERROR) << "Error initializing the HardwareInterface.";
-    return ErrorCode::kError;
+    return false;
   }
 
   UpdateAttempterAndroid update_attempter(&sideload_daemon_state,
@@ -161,13 +161,11 @@ ErrorCode ApplyUpdatePayload(const string& payload,
                                           nullptr);
   update_attempter.Init();
 
-  if (!update_attempter.ApplyPayload(
-          payload, payload_offset, payload_size, headers, nullptr)) {
-    LOG(ERROR) << "Error attempting the ApplyPayload.";
-  }
+  TEST_AND_RETURN_FALSE(update_attempter.ApplyPayload(
+      payload, payload_offset, payload_size, headers, nullptr));
 
   loop.Run();
-  return sideload_daemon_state.error_code();
+  return sideload_daemon_state.status() == UpdateStatus::UPDATED_NEED_REBOOT;
 }
 
 }  // namespace
@@ -200,6 +198,9 @@ int main(int argc, char** argv) {
   vector<string> headers = base::SplitString(
       FLAGS_headers, "\n", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
 
-  return static_cast<int>(chromeos_update_engine::ApplyUpdatePayload(
-      FLAGS_payload, FLAGS_offset, FLAGS_size, headers, FLAGS_status_fd));
+  if (!chromeos_update_engine::ApplyUpdatePayload(
+          FLAGS_payload, FLAGS_offset, FLAGS_size, headers, FLAGS_status_fd))
+    return 1;
+
+  return 0;
 }
