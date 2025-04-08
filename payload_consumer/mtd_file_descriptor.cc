@@ -680,7 +680,7 @@ bool UbiFileDescriptor::Close() {
       if (to_write > sizeof(buf)) {
         to_write = sizeof(buf);
       }
-      ssize_t nr_chunk;
+      ssize_t nr_chunk = 0;
       int ret = nad_ubi_write(hndl1, buf, to_write);
       if(ret == 0) {
         nr_chunk = to_write;
