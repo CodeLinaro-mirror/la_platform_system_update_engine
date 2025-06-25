@@ -37,6 +37,9 @@ PKG_CHECK_MODULES([LIBSELINUX], [libselinux])
 AC_SUBST([LIBSELINUX_CFLAGS])
 AC_SUBST([LIBSELINUX_LIBS])
 
+PKG_CHECK_MODULES([PROTOBUF], [protobuf >= 25.3], [protobuf_update=yes], [protobuf_update=no])
+AM_CONDITIONAL([PROTOBUF_INC_LIBS], [test "${protobuf_update}" = "yes"])
+
 # Checks for typedefs, structures, and compiler characteristics.
 AC_HEADER_STDBOOL
 AC_C_INLINE
@@ -89,6 +92,8 @@ if (test "x${with_glib}" = "xyes"); then
 fi
 
 AM_CONDITIONAL(USE_GLIB, test "x${with_glib}" = "xyes")
+AC_CHECK_FUNCS([strlcpy strlcat])
+AM_CONDITIONAL([USE_G_STRLCPY_STRLCAT], [test "x$ac_cv_func_strlcpy" = "xno" -a "x$ac_cv_func_strlcat" = "xno"])
 
 AS_CASE([$host],
         [arm*], [ARM=yes],
