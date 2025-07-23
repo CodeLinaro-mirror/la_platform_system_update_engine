@@ -89,8 +89,6 @@ if (test "x${with_glib}" = "xyes"); then
 fi
 
 AM_CONDITIONAL(USE_GLIB, test "x${with_glib}" = "xyes")
-AC_CHECK_FUNCS([strlcpy strlcat])
-AM_CONDITIONAL([USE_G_STRLCPY_STRLCAT], [test "x$ac_cv_func_strlcpy" = "xno" -a "x$ac_cv_func_strlcat" = "xno"])
 
 AS_CASE([$host],
         [arm*], [ARM=yes],

@@ -41,13 +41,11 @@ AM_CPPFLAGS := \
               -I$(WORKSPACE)/OTA/streaming/external/libbinderwrapper/include \
               -I$(WORKSPACE)/OTA/system/core/include \
               -I$(WORKSPACE)/OTA/streaming/external/libevent/include \
-              -std=c++17 \
+              -std=c++11 \
+              -Dstrlcpy=g_strlcpy \
+              -Dstrlcat=g_strlcat \
               -D_UE_SIDELOAD \
               -DUSE_BINDER
-
-if USE_G_STRLCPY_STRLCAT
-AM_CPPFLAGS += -Dstrlcpy=g_strlcpy -Dstrlcat=g_strlcat
-endif
 
 if BUILD_HOST
 AM_CPPFLAGS += -DUSE_NATIVE \
@@ -99,12 +97,6 @@ libpayload_generator_la_CFLAGS := $(AM_CFLAGS) -DUSE_GLIB @GLIB_CFLAGS@
 libpayload_generator_la_CPPFLAGS := $(AM_CPPFLAGS) -DUSE_GLIB @GLIB_CFLAGS@
 libpayload_generator_la_LIBADD := -lm -lpthread -levent -lprotobuf-lite @GLIB_LIBS@
 libpayload_generator_la_LDFLAGS := -all-static
-libpayload_generator_la_LIBADD += -labsl_raw_logging_internal \
-                                  -labsl_str_format_internal \
-                                  -labsl_log_internal_message \
-                                  -labsl_log_internal_globals \
-                                  -labsl_log_internal_format \
-                                  -labsl_log_internal_check_op
 else
 libpayload_generator_la_CFLAGS := $(AM_CFLAGS)
 libpayload_generator_la_CPPFLAGS := $(AM_CPPFLAGS)

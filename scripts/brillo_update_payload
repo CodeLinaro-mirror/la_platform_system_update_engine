@@ -4,12 +4,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-# Changes from Qualcomm Technologies, Inc. are provided under the following license:
-# Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
-# SPDX-License-Identifier: BSD-3-Clause-Clear
-
 # Script to generate a Brillo update for use by the update engine.
-
+#
 # usage: brillo_update_payload COMMAND [ARGS]
 # The following commands are supported:
 #  generate    generate an unsigned payload
@@ -372,7 +368,7 @@ extract_image_brillo() {
   local partitions_array="$2"
   local partitions_order="${3:-}"
 
-  local partitions=("boot" "rootfs")
+  local partitions=("boot" "dtbo" "rootfs")
   local ab_partitions_list
   ab_partitions_list=$(create_tempfile "ab_partitions_list.XXXXXX")
   CLEANUP_FILES+=("${ab_partitions_list}")
