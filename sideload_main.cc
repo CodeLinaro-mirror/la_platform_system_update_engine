@@ -129,6 +129,23 @@ void SetupLogging() {
 }
 
 #ifdef USE_LE_MODE
+bool RunCommand(const string& command_str) {
+  FILE* pipe = popen(command_str.c_str(), "r");
+  if (!pipe) {
+      LOG(ERROR) << "Error: popen failed to execute command. " << command_str;
+      return false;
+  }
+
+  int status = pclose(pipe);
+  if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+      LOG(INFO) << command_str << " executed successfully";
+      return true;
+  } else {
+      LOG(ERROR) << command_str << " failed, exit code: " << WEXITSTATUS(status);
+      return false;
+  }
+}
+
 class SideloadDaemonState : public DaemonStateInterface,
                             public ServiceObserverInterface {
  public:
@@ -331,6 +348,11 @@ int main(int argc, char** argv) {
         int64_t payload_offset = 0;
         int64_t payload_size;
         vector<string> payload_header;
+
+        if(!chromeos_update_engine::RunCommand("/usr/bin/busybox modprobe gluebi")){
+          LOG(INFO) << "Failed to load gluebi, exit from client";
+          return -1;
+        }
         payload_prop.open("/data/stream_update/properties.txt");
         for(std::string metadata; std::getline(payload_prop, metadata); ) {
            LOG(INFO) << "\n" << metadata;
@@ -362,6 +384,10 @@ int main(int argc, char** argv) {
         Mutex::Autolock _l(callback->mNotifyLock);
         LOG(INFO) << "wait for call to be executed ";
         callback->mNotifyCond.wait(callback->mNotifyLock);
+        }
+        if(!chromeos_update_engine::RunCommand("/usr/bin/busybox modprobe -r gluebi")){
+          LOG(INFO) << "Failed to remove gluebi, exit from client";
+          return -1;
         }
         LOG(INFO) << "exit from client";
     }
