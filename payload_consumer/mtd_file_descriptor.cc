@@ -110,7 +110,7 @@ MtdFileDescriptor::MtdFileDescriptor()
 #if USE_TELAF
     {}
 #else
-    : nad_mtd_ctx_(nullptr, &nad_mtd_close) {}
+    : nad_mtd_ctx_(nullptr, MtdHandlerDeleter{}) {}
 #endif
 #else
     : read_ctx_(nullptr, &mtd_read_close),
@@ -122,7 +122,7 @@ UbiFileDescriptor::UbiFileDescriptor()
 #if USE_TELAF
     {}
 #else
-    : nad_ubi_ctx_(nullptr, &nad_ubi_close) {}
+    : nad_ubi_ctx_(nullptr, UbiHandlerDeleter{}) {}
 #endif
 #endif
 
@@ -698,7 +698,7 @@ bool UbiFileDescriptor::Close() {
     }
   }
   LOG(INFO) << " UbiFileDescriptor:: Close ";
-  nad_ubi_close(hndl1);
+  nad_ubi_ctx_.reset();
 #endif
   }
 #endif

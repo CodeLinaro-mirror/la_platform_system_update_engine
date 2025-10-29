@@ -71,7 +71,16 @@ class MtdFileDescriptor : public EintrSafeFileDescriptor {
  private:
 #if USE_MTD
 #if !USE_TELAF
-  std::unique_ptr<nad_mtd_hndl_t, decltype(&nad_mtd_close)> nad_mtd_ctx_;
+  struct MtdHandlerDeleter{
+      void operator()(nad_mtd_hndl_t* ptr) const {
+          if(ptr){
+              nad_mtd_close(ptr);
+              free(ptr);
+              ptr = NULL;
+          }
+      }
+  };
+  std::unique_ptr<nad_mtd_hndl_t, MtdHandlerDeleter> nad_mtd_ctx_;
 #endif
 #else
   std::unique_ptr<MtdReadContext, decltype(&mtd_read_close)> read_ctx_;
@@ -138,7 +147,16 @@ class UbiFileDescriptor : public EintrSafeFileDescriptor {
   uint32_t free_leb_number_;
   uint64_t nr_written_;
 #if !USE_TELAF
-  std::unique_ptr<nad_ubi_hndl_t, decltype(&nad_ubi_close)> nad_ubi_ctx_;
+  struct UbiHandlerDeleter{
+      void operator()(nad_ubi_hndl_t* ptr) const {
+          if(ptr){
+              nad_ubi_close(ptr);
+              free(ptr);
+              ptr = NULL;
+          }
+      }
+  };
+  std::unique_ptr<nad_ubi_hndl_t, UbiHandlerDeleter> nad_ubi_ctx_;
 #endif
 
   Mode mode_;

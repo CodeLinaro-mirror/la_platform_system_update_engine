@@ -175,7 +175,8 @@ status_t BnStreamUpdateService::onTransact(
             payload_obj->ApplyUpdatePayload(
                str, payload_offset, payload_size, header_init, update_status_fd);
             LOG(INFO) << "\n  applypayload done ";
-      
+            delete payload_obj;
+            payload_obj = nullptr;
             for (int i = mCallbacks.size() - 1; i >= 0; i--)
             {
               LOG(INFO) << " execute callback ";
