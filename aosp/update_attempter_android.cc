@@ -861,7 +861,14 @@ void UpdateAttempterAndroid::ProgressUpdate(double progress) {
       TimeTicks::Now() - last_notify_time_ >=
           TimeDelta::FromSeconds(kBroadcastThresholdSeconds)) {
     download_progress_ = progress;
-    SetStatusAndNotify(status_);
+    auto action = processor_->current_action();
+    if (action->Type() == PostinstallRunnerAction::StaticType() &&
+        IsOptionalPostinstall(static_cast<PostinstallRunnerAction*>(action))) {
+      LOG(INFO) << "Async postinstall progress "
+                << ((int)(progress * 1000)) / 10.0f;
+    } else {
+      SetStatusAndNotify(status_);
+    }
   }
 }
 
@@ -1386,6 +1393,16 @@ void UpdateAttempterAndroid::CleanupSuccessfulUpdate(
   ScheduleCleanupPreviousUpdate();
 }
 
+bool UpdateAttempterAndroid::IsOptionalPostinstall(
+    PostinstallRunnerAction* postinstall_action) {
+  const InstallPlan& install_plan = postinstall_action->GetInputObject();
+  // Normal OTA updates contain more than 1 partition, if it only contains 1
+  // partition, and we have previously ran postinstall action.
+  // It's most likely triggered by `triggerPostinstall`, we can safely
+  // cancel it.
+  return install_plan.partitions.size() == 1 && install_plan.run_post_install;
+}
+
 bool UpdateAttempterAndroid::IsOptionalPostinstall(AbstractAction* action) {
   if (action == nullptr) {
     return false;
@@ -1395,7 +1412,6 @@ bool UpdateAttempterAndroid::IsOptionalPostinstall(AbstractAction* action) {
     return false;
   }
   auto postinstall_action = static_cast<PostinstallRunnerAction*>(action);
-  const InstallPlan& install_plan = postinstall_action->GetInputObject();
   bool postinstall_succeeded = false;
   if (!prefs_->GetBoolean(kPrefsPostInstallSucceeded, &postinstall_succeeded)) {
     return false;
@@ -1406,11 +1422,7 @@ bool UpdateAttempterAndroid::IsOptionalPostinstall(AbstractAction* action) {
            "the first time we are running postinstall action, not cancellable.";
     return false;
   }
-  // Normal OTA updates contain more than 1 partition, if it only contains 1
-  // partition, and we have previously ran postinstall action.
-  // It's most likely triggered by `triggerPostinstall`, we can safely
-  // cancel it.
-  return install_plan.partitions.size() == 1 && install_plan.run_post_install;
+  return IsOptionalPostinstall(postinstall_action);
 }
 
 bool UpdateAttempterAndroid::CancelOptionalPostinstall() {

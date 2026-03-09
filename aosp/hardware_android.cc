@@ -90,7 +90,14 @@ std::string CalculateVbmetaDigestForInactiveSlot() {
   const char* requested_partitions[] = {nullptr};
   auto avb_ops = avb_ops_user_new();
   DEFER {
-    avb_ops_user_free(avb_ops);
+    if (avb_ops != nullptr) {
+      avb_ops_user_free(avb_ops);
+      avb_ops = nullptr;
+    }
+    if (avb_slot_data != nullptr) {
+      avb_slot_verify_data_free(avb_slot_data);
+      avb_slot_data = nullptr;
+    }
   };
   auto verify_result = avb_slot_verify(avb_ops,
                                        requested_partitions,

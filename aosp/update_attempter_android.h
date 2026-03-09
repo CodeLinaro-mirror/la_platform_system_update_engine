@@ -149,6 +149,7 @@ class UpdateAttempterAndroid final
   // Return `true` iff current action is canceled.
   bool CancelOptionalPostinstall();
   bool IsOptionalPostinstall(AbstractAction* action);
+  bool IsOptionalPostinstall(PostinstallRunnerAction* postinstall_action);
 
   // Return |true| only if slot switched successfully after an OTA reboot.
   // This will return |false| if an downgrade OTA is applied. Because after a

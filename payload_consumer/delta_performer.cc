@@ -20,12 +20,12 @@
 
 #include <algorithm>
 #include <chrono>
-#include <cstring>
 #include <memory>
 #include <set>
 #include <string>
 #include <utility>
 #include <vector>
+#include <iterator>
 
 #include <android-base/properties.h>
 #include <android-base/strings.h>
@@ -785,8 +785,8 @@ bool DeltaPerformer::IsManifestValid() {
 }
 
 bool DeltaPerformer::ParseManifestPartitions(ErrorCode* error) {
-  partitions_.assign(manifest_.partitions().begin(),
-                     manifest_.partitions().end());
+  partitions_.assign(std::make_move_iterator(manifest_.partitions().begin()),
+                     std::make_move_iterator(manifest_.partitions().end()));
 
   // For VAB and partial updates, the partition preparation will copy the
   // dynamic partitions metadata to the target metadata slot, and rename the
@@ -807,6 +807,12 @@ bool DeltaPerformer::ParseManifestPartitions(ErrorCode* error) {
 
   // Partitions in manifest are no longer needed after preparing partitions.
   manifest_.clear_partitions();
+  // Protobuf doesn't automatically free memory used by RepeatedPtrField
+  // There's no shrink_to_fit() in protobuf, so we use swap to actually
+  // release memory
+  RepeatedPtrField<chromeos_update_engine::PartitionUpdate> empty;
+  manifest_.mutable_partitions()->Swap(&empty);
+
   // TODO(xunchang) TBD: allow partial update only on devices with dynamic
   // partition.
   if (manifest_.partial_update()) {
@@ -1458,14 +1464,14 @@ bool DeltaPerformer::ResetUpdateProgress(
   TEST_AND_RETURN_FALSE(prefs->SetInt64(kPrefsUpdateStateNextOperation,
                                         kUpdateStateOperationInvalid));
   if (!quick) {
-    prefs->SetInt64(kPrefsUpdateStateNextDataOffset, -1);
-    prefs->SetInt64(kPrefsUpdateStateNextDataLength, 0);
-    prefs->SetString(kPrefsUpdateStateSHA256Context, "");
-    prefs->SetString(kPrefsUpdateStateSignedSHA256Context, "");
-    prefs->SetString(kPrefsUpdateStateSignatureBlob, "");
-    prefs->SetInt64(kPrefsManifestMetadataSize, -1);
-    prefs->SetInt64(kPrefsManifestSignatureSize, -1);
-    prefs->SetInt64(kPrefsResumedUpdateFailures, 0);
+    prefs->Delete(kPrefsUpdateStateNextDataOffset);
+    prefs->Delete(kPrefsUpdateStateNextDataLength);
+    prefs->Delete(kPrefsUpdateStateSHA256Context);
+    prefs->Delete(kPrefsUpdateStateSignedSHA256Context);
+    prefs->Delete(kPrefsUpdateStateSignatureBlob);
+    prefs->Delete(kPrefsManifestMetadataSize);
+    prefs->Delete(kPrefsManifestSignatureSize);
+    prefs->Delete(kPrefsResumedUpdateFailures);
     prefs->Delete(kPrefsPostInstallSucceeded);
     prefs->Delete(kPrefsVerityWritten);
     if (!skip_dynamic_partititon_metadata_updated) {

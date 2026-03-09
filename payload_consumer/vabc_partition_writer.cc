@@ -16,6 +16,7 @@
 
 #include "update_engine/payload_consumer/vabc_partition_writer.h"
 
+#include <chrono>
 #include <memory>
 #include <string>
 #include <utility>
@@ -401,9 +402,15 @@ void VABCPartitionWriter::CheckpointUpdateProgress(size_t next_op_index) {
   TEST_AND_RETURN_FALSE(cow_writer_->AddLabel(kEndOfInstallLabel));
   TEST_AND_RETURN_FALSE(cow_writer_->Finalize());
 
+  const auto start = std::chrono::system_clock::now();
   auto cow_reader = cow_writer_->OpenReader();
   TEST_AND_RETURN_FALSE(cow_reader);
   TEST_AND_RETURN_FALSE(cow_reader->VerifyMergeOps());
+  const auto duration = std::chrono::system_clock::now() - start;
+  LOG(INFO)
+      << "Parsing COW and verify merge ordering took "
+      << std::chrono::duration_cast<std::chrono::milliseconds>(duration).count()
+      << " ms";
   return true;
 }
 

@@ -17,8 +17,6 @@
 #ifndef UPDATE_ENGINE_PAYLOAD_CONSUMER_DELTA_PERFORMER_H_
 #define UPDATE_ENGINE_PAYLOAD_CONSUMER_DELTA_PERFORMER_H_
 
-#include <inttypes.h>
-
 #include <limits>
 #include <memory>
 #include <string>
