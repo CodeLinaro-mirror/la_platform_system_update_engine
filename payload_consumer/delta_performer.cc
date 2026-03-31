@@ -16,7 +16,18 @@
 
 #include "update_engine/payload_consumer/delta_performer.h"
 
+#include <fcntl.h>
 #include <linux/fs.h>
+
+#include <base/files/file_util.h>
+#include <base/files/file_path.h>
+#include <unistd.h>
+
+#include "update_engine/common/hash_calculator.h"
+#include "update_engine/common/constants.h"
+#ifdef __ANDROID__
+#include "update_engine/common/platform_constants.h"
+#endif
 
 #include <algorithm>
 #include <chrono>
@@ -171,12 +182,49 @@ void DeltaPerformer::UpdateOverallProgress(bool force_log,
   last_progress_chunk_ = curr_progress_chunk;
 }
 
+namespace {
+const char* GetTempDir() {
+  const char* tmpdir = getenv("TMPDIR");
+  if (tmpdir != nullptr) {
+    return tmpdir;
+  }
+  return "/tmp";
+}
+}  // namespace
+
 size_t DeltaPerformer::CopyDataToBuffer(const char** bytes_p,
                                         size_t* count_p,
                                         size_t max) {
   const size_t count = *count_p;
   if (!count)
     return 0;  // Special case shortcut.
+
+  if (max > kMaxPayloadBufferSize) {
+    if (!payload_fd_.ok()) {
+      int fd = open(GetTempDir(), O_TMPFILE | O_RDWR | O_CLOEXEC, 0600);
+      if (fd < 0) {
+        PLOG(ERROR) << "Failed to open temporary file for payload";
+        return 0;
+      }
+      payload_fd_.reset(fd);
+      payload_file_size_ = 0;
+    }
+
+    size_t to_write = min(count, max - static_cast<size_t>(payload_file_size_));
+    if (!utils::WriteAll(payload_fd_.get(), *bytes_p, to_write)) {
+      PLOG(ERROR) << "Failed to write to payload file";
+      return 0;
+    }
+    payload_file_size_ += to_write;
+
+    payload_hash_calculator_.Update(*bytes_p, to_write);
+    signed_hash_calculator_.Update(*bytes_p, to_write);
+
+    *bytes_p += to_write;
+    *count_p -= to_write;
+    return to_write;
+  }
+
   size_t read_len = min(count, max - buffer_.size());
   const char* bytes_start = *bytes_p;
   const char* bytes_end = bytes_start + read_len;
@@ -208,7 +256,7 @@ int DeltaPerformer::Close() {
          !payload_hash_calculator_.Finalize() ||
              !signed_hash_calculator_.Finalize())
       << "Unable to finalize the hash.";
-  if (!buffer_.empty()) {
+  if (!buffer_.empty() || payload_fd_.ok()) {
     LOG(INFO) << "Discarding " << buffer_.size() << " unused downloaded bytes";
     if (err >= 0)
       err = 1;
@@ -958,6 +1006,10 @@ bool DeltaPerformer::CanPerformInstallOperation(
     return false;
   }
 
+  if (payload_fd_.ok()) {
+    return (operation.data_offset() + operation.data_length() <=
+            buffer_offset_ + payload_file_size_);
+  }
   return (operation.data_offset() + operation.data_length() <=
           buffer_offset_ + buffer_.size());
 }
@@ -971,10 +1023,17 @@ bool DeltaPerformer::PerformReplaceOperation(
 
   // Since we delete data off the beginning of the buffer as we use it,
   // the data we need should be exactly at the beginning of the buffer.
-  TEST_AND_RETURN_FALSE(buffer_.size() >= operation.data_length());
+  TEST_AND_RETURN_FALSE(
+      buffer_.size() >= operation.data_length() ||
+      (payload_fd_.ok() && payload_file_size_ >= operation.data_length()));
 
-  TEST_AND_RETURN_FALSE(partition_writer_->PerformReplaceOperation(
-      operation, buffer_.data(), buffer_.size()));
+  if (payload_fd_.ok()) {
+    TEST_AND_RETURN_FALSE(partition_writer_->PerformReplaceOperation(
+        operation, payload_fd_.get(), 0, operation.data_length()));
+  } else {
+    TEST_AND_RETURN_FALSE(partition_writer_->PerformReplaceOperation(
+        operation, buffer_.data(), buffer_.size()));
+  }
   // Update buffer
   DiscardBuffer(true, buffer_.size());
   return true;
@@ -1029,14 +1088,21 @@ bool DeltaPerformer::PerformDiffOperation(const InstallOperation& operation,
   // Since we delete data off the beginning of the buffer as we use it,
   // the data we need should be exactly at the beginning of the buffer.
   TEST_AND_RETURN_FALSE(buffer_offset_ == operation.data_offset());
-  TEST_AND_RETURN_FALSE(buffer_.size() >= operation.data_length());
+  TEST_AND_RETURN_FALSE(
+      buffer_.size() >= operation.data_length() ||
+      (payload_fd_.ok() && payload_file_size_ >= operation.data_length()));
   if (operation.has_src_length())
     TEST_AND_RETURN_FALSE(operation.src_length() % block_size_ == 0);
   if (operation.has_dst_length())
     TEST_AND_RETURN_FALSE(operation.dst_length() % block_size_ == 0);
 
-  TEST_AND_RETURN_FALSE(partition_writer_->PerformDiffOperation(
-      operation, error, buffer_.data(), buffer_.size()));
+  if (payload_fd_.ok()) {
+    TEST_AND_RETURN_FALSE(partition_writer_->PerformDiffOperation(
+        operation, error, payload_fd_.get(), 0, operation.data_length()));
+  } else {
+    TEST_AND_RETURN_FALSE(partition_writer_->PerformDiffOperation(
+        operation, error, buffer_.data(), buffer_.size()));
+  }
   DiscardBuffer(true, buffer_.size());
   return true;
 }
@@ -1295,8 +1361,20 @@ ErrorCode DeltaPerformer::ValidateOperationHash(
                            operation.data_sha256_hash().size()));
 
   brillo::Blob calculated_op_hash;
-  if (!HashCalculator::RawHashOfBytes(
-          buffer_.data(), operation.data_length(), &calculated_op_hash)) {
+  bool hash_ok = false;
+  if (payload_fd_ && payload_file_size_ >= operation.data_length()) {
+    if (lseek(payload_fd_, 0, SEEK_SET) < 0) {
+      PLOG(ERROR) << "Failed to seek to beginning of tmp operation data file";
+    }
+    hash_ok = HashCalculator::RawHashOfFile(payload_fd_.get(),
+                                            operation.data_length(),
+                                            &calculated_op_hash) >= 0;
+  } else {
+    hash_ok = HashCalculator::RawHashOfBytes(
+        buffer_.data(), operation.data_length(), &calculated_op_hash);
+  }
+
+  if (!hash_ok) {
     LOG(ERROR) << "Unable to compute actual hash of operation "
                << next_operation_num_;
     return ErrorCode::kDownloadOperationHashVerificationError;
@@ -1377,12 +1455,24 @@ ErrorCode DeltaPerformer::VerifyPayload(
 void DeltaPerformer::DiscardBuffer(bool do_advance_offset,
                                    size_t signed_hash_buffer_size) {
   // Update the buffer offset.
-  if (do_advance_offset)
-    buffer_offset_ += buffer_.size();
+  if (do_advance_offset) {
+    if (payload_fd_.get() != -1) {
+      buffer_offset_ += payload_file_size_;
+    } else {
+      buffer_offset_ += buffer_.size();
+    }
+  }
 
   // Hash the content.
-  payload_hash_calculator_.Update(buffer_.data(), buffer_.size());
-  signed_hash_calculator_.Update(buffer_.data(), signed_hash_buffer_size);
+  if (payload_fd_.get() != -1) {
+    // We already hashed the content in CopyDataToBuffer.
+    // data in temp file is already hashed, so we just need to reset the fd.
+    payload_fd_.reset();
+    payload_file_size_ = 0;
+  } else {
+    payload_hash_calculator_.Update(buffer_.data(), buffer_.size());
+    signed_hash_calculator_.Update(buffer_.data(), signed_hash_buffer_size);
+  }
 
   // Swap content with an empty vector to ensure that all memory is released.
   brillo::Blob().swap(buffer_);

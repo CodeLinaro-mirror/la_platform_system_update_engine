@@ -1117,4 +1117,68 @@ TEST_F(DeltaPerformerTest, SetNextOpIndex) {
   ASSERT_EQ(indices[indices.size() - 1], 2UL);
 }
 
+TEST_F(DeltaPerformerTest, LargeOperationBufferedToFile) {
+  TestDeltaPerformer delta_performer{&prefs_,
+                                     &fake_boot_control_,
+                                     &fake_hardware_,
+                                     &mock_delegate_,
+                                     &install_plan_,
+                                     &payload_,
+                                     false};
+  // Add 1MB data to exceed max memory cache limit.
+  size_t kDataSize = DeltaPerformer::kMaxPayloadBufferSize + 1024 * 1024;
+  brillo::Blob expected_data(kDataSize);
+  // Fill with some pattern to verify integrity.
+  for (size_t i = 0; i < kDataSize; i++) {
+    expected_data[i] = static_cast<uint8_t>(i & 0xFF);
+  }
+
+  ScopedTempFile source("Source-XXXXXX");
+  ASSERT_TRUE(test_utils::WriteFileVector(source.path(), expected_data));
+
+  PartitionConfig old_part(kPartitionNameRoot);
+  old_part.path = source.path();
+  old_part.size = expected_data.size();
+
+  delta_performer.partition_writers_[kPartitionNameRoot] =
+      std::make_unique<MockPartitionWriter>();
+  auto& writer1 = *delta_performer.partition_writers_[kPartitionNameRoot];
+
+  EXPECT_CALL(writer1, Init(_, true, _)).Times(1).WillOnce(Return(true));
+  EXPECT_CALL(writer1, CheckpointUpdateProgress(_)).Times(testing::AnyNumber());
+
+  // Expect FD-backed Replace Operation.
+  EXPECT_CALL(writer1, PerformReplaceOperation(_, testing::A<int>(), _, _))
+      .WillOnce(testing::Invoke(
+          [&expected_data](
+              const InstallOperation& op, int fd, off_t offset, size_t count) {
+            EXPECT_EQ(offset, 0);
+            EXPECT_EQ(count, expected_data.size());
+            EXPECT_GT(fd, 0);
+            if (HasFatalFailure()) {
+              return false;
+            }
+
+            brillo::Blob read_data(count);
+            ssize_t bytes_read = pread(fd, read_data.data(), count, 0);
+            EXPECT_EQ(bytes_read, static_cast<ssize_t>(count));
+            // Use EXPECT_TRUE to avoid printing the entire blob on failure,
+            // which causes the test to crash.
+            EXPECT_TRUE(read_data == expected_data);
+            return !HasFatalFailure();
+          }));
+
+  // We need to construct the payload with a REPLACE op.
+  AnnotatedOperation aop;
+  *(aop.op.add_dst_extents()) = ExtentForRange(0, kDataSize / 4096);
+  aop.op.set_data_offset(0);
+  aop.op.set_data_length(expected_data.size());
+  aop.op.set_type(InstallOperation::REPLACE);
+
+  brillo::Blob payload_data = GeneratePayload(expected_data, {aop}, false);
+
+  ApplyPayloadToData(
+      &delta_performer, payload_data, "/dev/null", expected_data, true);
+}
+
 }  // namespace chromeos_update_engine

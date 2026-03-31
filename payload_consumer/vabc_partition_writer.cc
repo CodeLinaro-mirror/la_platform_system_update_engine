@@ -364,6 +364,16 @@ bool VABCPartitionWriter::PerformReplaceOperation(const InstallOperation& op,
   return executor_.ExecuteReplaceOperation(op, std::move(writer), data);
 }
 
+bool VABCPartitionWriter::PerformReplaceOperation(const InstallOperation& op,
+                                                  int fd,
+                                                  off_t offset,
+                                                  size_t count) {
+  // Setup the ExtentWriter stack based on the operation type.
+  std::unique_ptr<ExtentWriter> writer = CreateBaseExtentWriter();
+  return executor_.ExecuteReplaceOperation(
+      op, std::move(writer), fd, offset, count);
+}
+
 bool VABCPartitionWriter::PerformDiffOperation(
     const InstallOperation& operation,
     ErrorCode* error,
@@ -384,6 +394,29 @@ bool VABCPartitionWriter::PerformDiffOperation(
                      : CreateBaseExtentWriter();
   return executor_.ExecuteDiffOperation(
       operation, std::move(writer), source_fd, data, count);
+}
+
+bool VABCPartitionWriter::PerformDiffOperation(
+    const InstallOperation& operation,
+    ErrorCode* error,
+    int fd,
+    off_t offset,
+    size_t count) {
+  FileDescriptorPtr source_fd =
+      verified_source_fd_.ChooseSourceFD(operation, error);
+  TEST_AND_RETURN_FALSE(source_fd != nullptr);
+  TEST_AND_RETURN_FALSE(source_fd->IsOpen());
+
+  std::unique_ptr<ExtentWriter> writer =
+      IsXorEnabled() ? std::make_unique<XORExtentWriter>(
+                           operation,
+                           source_fd,
+                           cow_writer_.get(),
+                           xor_map_,
+                           partition_update_.old_partition_info().size())
+                     : CreateBaseExtentWriter();
+  return executor_.ExecuteDiffOperation(
+      operation, std::move(writer), source_fd, fd, offset, count);
 }
 
 void VABCPartitionWriter::CheckpointUpdateProgress(size_t next_op_index) {

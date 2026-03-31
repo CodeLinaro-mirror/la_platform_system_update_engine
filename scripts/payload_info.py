@@ -27,7 +27,16 @@ import textwrap
 import json
 
 from six.moves import range
-import update_metadata_pb2
+try:
+  import update_metadata_pb2
+except ImportError:
+  print("Error: Could not import update_metadata_pb2.", file=sys.stderr)
+  print("If you are in an AOSP environment, please build this tool with:", file=sys.stderr)
+  print("  m payload_info", file=sys.stderr)
+  print("And run the generated binary", file=sys.stderr)
+  print("or append system/update_engine/scripts to $PYTHONPATH.", file=sys.stderr)
+  raise
+
 import update_payload
 
 
