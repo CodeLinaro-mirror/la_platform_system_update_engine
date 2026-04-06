@@ -230,8 +230,17 @@ bool BootControlRecovery::GetPartitionDevice(const string& partition_name,
   std::string str;
   LOG(INFO) << "boot_control partition_name:  " << partition_name.c_str();
   if ( (partition_name == "rootfs") || (partition_name == "telaf") || (partition_name == "firmware") || (partition_name == "vm-bootsys") ){
+#ifdef USE_MTD
       snprintf(inactive_partition, sizeof(inactive_partition), "%s%s", partition_name.c_str(),
           chromeos_update_engine::boot_control::slot_suffix_arr[chromeos_update_engine::boot_control::inactive_slot]);
+#else
+      if(chromeos_update_engine::boot_control::inactive_slot == 0){
+          snprintf(inactive_partition, sizeof(inactive_partition), "%s", partition_name.c_str());
+      } else {
+          snprintf(inactive_partition, sizeof(inactive_partition), "%s%s", partition_name.c_str(),
+               chromeos_update_engine::boot_control::slot_suffix_arr[chromeos_update_engine::boot_control::inactive_slot]);
+      }
+#endif
       LOG(INFO) << "boot_control partition_name for volumes:  " << inactive_partition;
   } else {
       if(chromeos_update_engine::boot_control::boot_slot == 0)
