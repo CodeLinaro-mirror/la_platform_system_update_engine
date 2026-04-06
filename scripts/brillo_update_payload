@@ -380,17 +380,24 @@ extract_image_brillo() {
 #    if [[ ${#partitions[@]} -eq 0 ]]; then
 #      die "The list of partitions is empty. Can't generate a payload."
 #    fi
-#  elif unzip -p "${image}" "RADIO/filesmap" >"${ab_partitions_list}"; then
-#    sed -i '/#/d;/\//d;/^$/d;' ${ab_partitions_list}
-#    sed -i '/sbl/d;/modem/d;/sec/d;/apdp/d' ${ab_partitions_list}
-#    echo "$(awk -v img="${image}" '{ if( system("unzip -l "img" |grep -q IMAGES/"$1 ) == 0 ){ print $2 "\n" }}' ${ab_partitions_list})" > ${ab_partitions_list}
-#    if grep -v -E '^[a-zA-Z0-9_-]*$' "${ab_partitions_list}" >&2; then
-#      die "Invalid partition names found in the partition list."
-#    fi
-#    partitions+=($(cat "${ab_partitions_list}"))
-#  else
+  if unzip -p "${image}" "RADIO/filesmap" >"${ab_partitions_list}"; then
+    sed -i '/#/d;/^$/d;' ${ab_partitions_list}
+    sed -i '/sbl/d;/sec/d;/apdp/d' ${ab_partitions_list}
+    echo "$(awk -v img="${image}" '
+    {
+        part = $2;
+        n = split(part, arr, "/");
+        pname = arr[n];
+        if (system("unzip -l " img " | grep -qE \"IMAGES/" pname "\\.(ubi|bin|img|elf|mbn)$\"") == 0)
+            print pname;
+    }' ${ab_partitions_list})" > ${ab_partitions_list}
+    if grep -v -E '^[a-zA-Z0-9_-]*$' "${ab_partitions_list}" >&2; then
+      die "Invalid partition names found in the partition list."
+    fi
+    partitions=($(printf "%s\n" "${partitions[@]}" $(cat "${ab_partitions_list}") | sort -u))
+  else
     warn "No ab_partitions.txt found. Using default."
-#  fi
+  fi
   echo "List of A/B partitions: ${partitions[@]}"
 
   if [[ -n "${partitions_order}" ]]; then
