@@ -23,6 +23,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <android-base/parseint.h>
@@ -37,6 +38,7 @@
 
 #include "update_engine/common/constants.h"
 #include "update_engine/common/error_code.h"
+#include "update_engine/common/error_code_utils.h"
 #include "update_engine/common/fake_boot_control.h"
 #include "update_engine/common/fake_hardware.h"
 #include "update_engine/common/fake_prefs.h"
@@ -1179,6 +1181,140 @@ TEST_F(DeltaPerformerTest, LargeOperationBufferedToFile) {
 
   ApplyPayloadToData(
       &delta_performer, payload_data, "/dev/null", expected_data, true);
+}
+
+TEST_F(DeltaPerformerTest, LargeOperationResumedWithHashMismatchRepro) {
+  // This test reproduces b/491198416.
+  // We simulate an interruption during a large REPLACE operation.
+  // The buffer is partially filled and hashed, then a checkpoint is made.
+  // On resume, the same data should not be hashed again.
+
+  // 1. Create a large payload.
+  size_t kDataSize = DeltaPerformer::kMaxPayloadBufferSize * 2;
+  brillo::Blob expected_data(kDataSize + 4096);
+  for (size_t i = 0; i < expected_data.size(); i++) {
+    expected_data[i] = static_cast<uint8_t>(i & 0xFF);
+  }
+
+  // Op 0: small
+  AnnotatedOperation aop0;
+  *(aop0.op.add_dst_extents()) = ExtentForRange(0, 1);
+  aop0.op.set_data_offset(0);
+  aop0.op.set_data_length(4096);
+  aop0.op.set_type(InstallOperation::REPLACE);
+
+  // Op 1: large
+  AnnotatedOperation aop1;
+  *(aop1.op.add_dst_extents()) = ExtentForRange(1, kDataSize / 4096);
+  aop1.op.set_data_offset(4096);
+  aop1.op.set_data_length(kDataSize);
+  aop1.op.set_type(InstallOperation::REPLACE);
+
+  brillo::Blob payload_data =
+      GeneratePayload(expected_data, {aop0, aop1}, false);
+  brillo::Blob payload_hash;
+  ASSERT_TRUE(HashCalculator::RawHashOfData(payload_data, &payload_hash));
+
+  // 2. Feed half of the payload data.
+  size_t metadata_size = payload_.metadata_size;
+  size_t partial_size = metadata_size + 4096 + kDataSize * 3 / 4;
+
+  // Set up mock devices in fake_boot_control_.
+  ScopedTempFile root_part("root_part-XXXXXX");
+  fake_boot_control_.SetPartitionDevice(
+      kPartitionNameRoot, install_plan_.target_slot, root_part.path());
+  fake_boot_control_.SetPartitionDevice(
+      kPartitionNameRoot, install_plan_.source_slot, "/dev/null");
+  fake_boot_control_.SetPartitionDevice(
+      kPartitionNameKernel, install_plan_.target_slot, "/dev/null");
+  fake_boot_control_.SetPartitionDevice(
+      kPartitionNameKernel, install_plan_.source_slot, "/dev/null");
+
+  // We use the same performer for initial write.
+  {
+    install_plan_.is_resume = true;
+    TestDeltaPerformer delta_performer{&prefs_,
+                                       &fake_boot_control_,
+                                       &fake_hardware_,
+                                       &mock_delegate_,
+                                       &install_plan_,
+                                       &payload_,
+                                       false,
+                                       ""};
+
+    // The first performer needs a writer to initialized the partition.
+    delta_performer.partition_writers_[kPartitionNameRoot] =
+        std::make_unique<MockPartitionWriter>();
+    auto& p_writer = *delta_performer.partition_writers_[kPartitionNameRoot];
+    EXPECT_CALL(p_writer, Init(_, _, _)).WillOnce(Return(true));
+    EXPECT_CALL(p_writer, PerformReplaceOperation(_, _, _))
+        .WillRepeatedly(Return(true));
+    EXPECT_CALL(p_writer, PerformReplaceOperation(_, _, _, _))
+        .WillRepeatedly(Return(true));
+    EXPECT_CALL(p_writer, CheckpointUpdateProgress(_))
+        .Times(testing::AnyNumber());
+
+    // We need to set the update check response hash to allow resume.
+    const std::string payload_id = "repro_id";
+    prefs_.SetString(kPrefsUpdateCheckResponseHash, payload_id);
+
+    // Set payload fields for the plan used by this performer.
+    payload_.hash = payload_hash;
+    payload_.size = payload_data.size();
+
+    ASSERT_TRUE(delta_performer.Write(payload_data.data(), partial_size));
+    // Force a checkpoint.
+    delta_performer.CheckpointUpdateProgress(true);
+  }
+
+  // 3. Resume with a new performer and write the rest.
+  {
+    TestDeltaPerformer resume_performer{&prefs_,
+                                        &fake_boot_control_,
+                                        &fake_hardware_,
+                                        &mock_delegate_,
+                                        &install_plan_,
+                                        &payload_,
+                                        false,
+                                        ""};
+
+    // Set up mock partition writer for the resume performer.
+    resume_performer.partition_writers_[kPartitionNameRoot] =
+        std::make_unique<MockPartitionWriter>();
+    auto& writer = *resume_performer.partition_writers_[kPartitionNameRoot];
+    EXPECT_CALL(writer, Init(_, true, _)).WillOnce(Return(true));
+    EXPECT_CALL(writer, PerformReplaceOperation(_, _, _))
+        .WillRepeatedly(Return(true));
+    EXPECT_CALL(writer, PerformReplaceOperation(_, _, _, _))
+        .WillRepeatedly(Return(true));
+    EXPECT_CALL(writer, CheckpointUpdateProgress(_))
+        .Times(testing::AnyNumber());
+
+    // Write the remaining payload data to the resume performer.
+    // In a real resume, the fetcher starts from the resume offset.
+    // Since we've already parsed the manifest in the resume performer (if we re-fed it),
+    // let's see how DownloadAction does it. It re-feeds the manifest.
+
+    // To match real world exactly, we should feed manifest, then feed from the offset.
+    size_t resume_offset = metadata_size + 4096;
+
+    // First, feed manifest again (like LoadCachedManifest does)
+    ASSERT_TRUE(resume_performer.Write(payload_data.data(), metadata_size));
+    ASSERT_TRUE(resume_performer.IsManifestValid());
+
+    // Then, feed from the START of Op 1 data (resume_offset).
+    // The data remaining is (payload_data.size() - resume_offset).
+    ASSERT_TRUE(resume_performer.Write(payload_data.data() + resume_offset,
+                                       payload_data.size() - resume_offset));
+
+    resume_performer.Close();
+
+    // 4. Verify that payload hash is correct at the end.
+    ErrorCode code =
+        resume_performer.VerifyPayload(payload_hash, payload_data.size());
+    ASSERT_EQ(ErrorCode::kSuccess, code)
+        << "VerifyPayload failed with " << utils::ErrorCodeToString(code);
+  }
 }
 
 }  // namespace chromeos_update_engine

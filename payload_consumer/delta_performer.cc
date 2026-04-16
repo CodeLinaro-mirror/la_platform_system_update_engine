@@ -199,7 +199,9 @@ size_t DeltaPerformer::CopyDataToBuffer(const char** bytes_p,
   if (!count)
     return 0;  // Special case shortcut.
 
-  if (max > kMaxPayloadBufferSize) {
+  // We don't support parsing manifest's protobuf message from file descriptor
+  // yet, so writing manifest to disk doesn't save any memory.
+  if (max > kMaxPayloadBufferSize && manifest_valid_) {
     if (!payload_fd_.ok()) {
       int fd = open(GetTempDir(), O_TMPFILE | O_RDWR | O_CLOEXEC, 0600);
       if (fd < 0) {
@@ -216,10 +218,6 @@ size_t DeltaPerformer::CopyDataToBuffer(const char** bytes_p,
       return 0;
     }
     payload_file_size_ += to_write;
-
-    payload_hash_calculator_.Update(*bytes_p, to_write);
-    signed_hash_calculator_.Update(*bytes_p, to_write);
-
     *bytes_p += to_write;
     *count_p -= to_write;
     return to_write;
@@ -1035,7 +1033,7 @@ bool DeltaPerformer::PerformReplaceOperation(
         operation, buffer_.data(), buffer_.size()));
   }
   // Update buffer
-  DiscardBuffer(true, buffer_.size());
+  DiscardBuffer(true, operation.data_length());
   return true;
 }
 
@@ -1103,7 +1101,7 @@ bool DeltaPerformer::PerformDiffOperation(const InstallOperation& operation,
     TEST_AND_RETURN_FALSE(partition_writer_->PerformDiffOperation(
         operation, error, buffer_.data(), buffer_.size()));
   }
-  DiscardBuffer(true, buffer_.size());
+  DiscardBuffer(true, operation.data_length());
   return true;
 }
 
@@ -1465,8 +1463,17 @@ void DeltaPerformer::DiscardBuffer(bool do_advance_offset,
 
   // Hash the content.
   if (payload_fd_.get() != -1) {
-    // We already hashed the content in CopyDataToBuffer.
-    // data in temp file is already hashed, so we just need to reset the fd.
+    // If we have a temporary file, hash its content.
+    // HashCalculator::UpdateFile does not seek, so we must seek to the
+    // beginning of the file.
+    if (lseek(payload_fd_.get(), 0, SEEK_SET) != 0) {
+      PLOG(ERROR) << "Failed to seek to the beginning of payload file";
+    } else {
+      payload_hash_calculator_.UpdateFile(payload_fd_.get(), payload_file_size_);
+      lseek(payload_fd_.get(), 0, SEEK_SET);
+      signed_hash_calculator_.UpdateFile(payload_fd_.get(),
+                                         signed_hash_buffer_size);
+    }
     payload_fd_.reset();
     payload_file_size_ = 0;
   } else {
