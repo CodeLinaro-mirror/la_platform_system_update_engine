@@ -23,6 +23,7 @@
 #include <utility>
 #include <vector>
 
+#include <android-base/unique_fd.h>
 #include <base/time/time.h>
 #include <brillo/secure_blob.h>
 #include <google/protobuf/repeated_field.h>
@@ -189,6 +190,9 @@ class DeltaPerformer : public FileWriter {
       const std::string& update_check_response_hash,
       uint64_t* required_size,
       ErrorCode* error = nullptr);
+  // When the operation payload size is larger than this, we will write to a
+  // temporary file instead of keeping it in memory.
+  static constexpr size_t kMaxPayloadBufferSize = 20 * 1024 * 1024;
 
  protected:
   // Exposed as virtual for testing purposes.
@@ -431,6 +435,11 @@ class DeltaPerformer : public FileWriter {
   base::TimeTicks update_checkpoint_time_;
 
   std::unique_ptr<PartitionWriterInterface> partition_writer_;
+
+  // File descriptor for the temporary file when the payload is larger than
+  // kMaxPayloadBufferSize.
+  android::base::unique_fd payload_fd_;
+  uint64_t payload_file_size_{0};
 
   DISALLOW_COPY_AND_ASSIGN(DeltaPerformer);
 };

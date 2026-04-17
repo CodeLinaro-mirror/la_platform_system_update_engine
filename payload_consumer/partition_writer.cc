@@ -192,6 +192,16 @@ bool PartitionWriter::PerformReplaceOperation(const InstallOperation& operation,
       operation, std::move(writer), data);
 }
 
+bool PartitionWriter::PerformReplaceOperation(const InstallOperation& operation,
+                                              int fd,
+                                              off_t offset,
+                                              size_t count) {
+  // Setup the ExtentWriter stack based on the operation type.
+  std::unique_ptr<ExtentWriter> writer = CreateBaseExtentWriter();
+  return install_op_executor_.ExecuteReplaceOperation(
+      operation, std::move(writer), fd, offset, count);
+}
+
 bool PartitionWriter::PerformZeroOrDiscardOperation(
     const InstallOperation& operation) {
 #ifdef BLKZEROOUT
@@ -259,6 +269,19 @@ bool PartitionWriter::PerformDiffOperation(const InstallOperation& operation,
   auto writer = CreateBaseExtentWriter();
   return install_op_executor_.ExecuteDiffOperation(
       operation, std::move(writer), source_fd, data, count);
+}
+
+bool PartitionWriter::PerformDiffOperation(const InstallOperation& operation,
+                                           ErrorCode* error,
+                                           int fd,
+                                           off_t offset,
+                                           size_t count) {
+  FileDescriptorPtr source_fd = ChooseSourceFD(operation, error);
+  TEST_AND_RETURN_FALSE(source_fd != nullptr);
+
+  auto writer = CreateBaseExtentWriter();
+  return install_op_executor_.ExecuteDiffOperation(
+      operation, std::move(writer), source_fd, fd, offset, count);
 }
 
 FileDescriptorPtr PartitionWriter::ChooseSourceFD(
