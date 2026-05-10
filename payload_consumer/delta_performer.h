@@ -62,6 +62,7 @@ class DeltaPerformer : public FileWriter {
   static const unsigned kProgressDownloadWeight;
   static const unsigned kProgressOperationsWeight;
   static const uint64_t kCheckpointFrequencySeconds;
+  static constexpr int64_t kUpdateStateOperationInvalid = -1;
 
   DeltaPerformer(
       PrefsInterface* prefs,

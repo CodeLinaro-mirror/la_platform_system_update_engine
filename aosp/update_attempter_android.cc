@@ -1297,6 +1297,16 @@ uint64_t UpdateAttempterAndroid::AllocateSpaceForPayload(
         __FILE__,
         "Already processing an update, cancel it first.");
   }
+  if (GetCurrentSlot() != boot_control_->GetActiveBootSlot()) {
+    return LogAndSetGenericError(
+        error,
+        __LINE__,
+        __FILE__,
+        "Current slot does not match active boot slot. "
+        "Please call resetStatus() to reset the update state before allocating "
+        "space.");
+  }
+
   std::map<string, string> headers;
   if (!ParseKeyValuePairHeaders(key_value_pair_headers, &headers, error)) {
     return 0;

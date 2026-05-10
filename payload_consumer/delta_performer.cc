@@ -84,7 +84,6 @@ const unsigned DeltaPerformer::kProgressOperationsWeight = 50;
 const uint64_t DeltaPerformer::kCheckpointFrequencySeconds = 1;
 
 namespace {
-const int kUpdateStateOperationInvalid = -1;
 const int kMaxResumedUpdateFailures = 10;
 
 }  // namespace
