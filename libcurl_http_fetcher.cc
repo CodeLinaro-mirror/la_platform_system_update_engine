@@ -121,7 +121,7 @@ LibcurlHttpFetcher::~LibcurlHttpFetcher() {
 }
 
 bool LibcurlHttpFetcher::GetProxyType(const string& proxy,
-                                      curl_proxytype* out_type) {
+                                      long* out_type) {
   if (base::StartsWith(
           proxy, "socks5://", base::CompareCase::INSENSITIVE_ASCII) ||
       base::StartsWith(
@@ -179,7 +179,7 @@ void LibcurlHttpFetcher::ResumeTransfer(const string& url) {
                               CURLOPT_PROXY,
                               GetCurrentProxy().c_str()), CURLE_OK);
     // Curl seems to require us to set the protocol
-    curl_proxytype type;
+    long type;
     if (GetProxyType(GetCurrentProxy(), &type)) {
       CHECK_EQ(curl_easy_setopt(curl_handle_,
                                 CURLOPT_PROXYTYPE,
