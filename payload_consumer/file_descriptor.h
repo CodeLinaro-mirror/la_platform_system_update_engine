@@ -20,6 +20,7 @@
 #include <errno.h>
 #include <memory>
 #include <sys/types.h>
+#include <cstdint>
 
 #include <base/logging.h>
 
